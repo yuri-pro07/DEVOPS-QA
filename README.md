@@ -1,8 +1,9 @@
-# Case A: Gamificação para Engajamento de Educação Continuada
+# Case A — Gamificação para Engajamento de Educação Continuada
 
-Entrega da nossa equipe aplicando ATDD, BDD e TDD.
+Entrega da equipe aplicando **ATDD → BDD → TDD**.
 
-> ⚠️ **Os 3 testes deste projeto falham de propósito.** Este é o 1º passo do TDD, o "teste para falhar" (RED). Não é defeito.
+> ⚠️ **Os testes deste projeto falham de propósito.** Esta entrega vai até o 1º passo do TDD,
+> o "teste para falhar" (RED). Não é defeito — é o estado esperado desta etapa.
 
 ## 👥 Equipe
 
@@ -10,13 +11,19 @@ Entrega da nossa equipe aplicando ATDD, BDD e TDD.
 - Enzo Zorzetto
 - Pedro Ricci Gomes Nascimento
 
-## 🎯 Visão do produto
+## 📖 Descrição do estudo de caso
 
-Uma determinada plataforma vende cursos online e EAD no modelo de assinaturas. O aluno paga um valor mensal e tem acesso a um conjunto de cursos para assinatura básica. A cada curso terminado e com média acima de 7,0, o aluno tem direito à realização de mais 3 cursos. O aluno que escrever mais tópicos no fórum e ajudar outros participantes com seus comentários ganha um curso no final do mês. Quando o aluno conquistar 12 cursos, seu plano de assinatura passa a ser "Premium" e ele passa a receber voucher para participar de projetos reais durante os cursos, além de 3 moedas, que podem ser convertidas em conhecimento (novos cursos), acumuladas ou recebidas por criptomoeda.
+**Case A — Gamificação para Engajamento de Educação Continuada.**
 
-## 1) Product Backlog
+Uma determinada plataforma vende cursos online e EAD no modelo de assinaturas. O aluno paga um
+valor mensal e tem acesso a um conjunto de cursos para assinatura básica. A cada curso terminado e
+com média acima de 7,0, o aluno tem direito à realização de mais 3 cursos. O aluno que escrever
+mais tópicos no fórum e ajudar outros participantes com seus comentários ganha um curso no final do
+mês. Quando o aluno conquistar 12 cursos, seu plano de assinatura passa a ser "Premium" e ele passa
+a receber voucher para participar de projetos reais durante os cursos, além de 3 moedas, que podem
+ser convertidas em conhecimento (novos cursos), acumuladas ou recebidas por criptomoeda.
 
-Cada integrante escreveu 1 User Story:
+## 1) Product Backlog — 1 User Story por integrante
 
 | #US | Integrante | As a | I want | So that | Escolhida pelo grupo |
 |---|---|---|---|---|---|
@@ -24,27 +31,72 @@ Cada integrante escreveu 1 User Story:
 | 2 | Enzo Zorzetto | COMO administrador da plataforma | QUERO visualizar um ranking mensal dos alunos mais engajados no fórum | PARA identificar quem merece destaque e incentivar a comunidade a participar mais | Não |
 | 3 | Pedro Ricci Gomes Nascimento | COMO aluno assinante | QUERO desbloquear selos/conquistas visuais (ex.: "Maratonista", "Mentor da Turma") ao atingir marcos de comportamento diferentes entre si | PARA exibir meu progresso de forma divertida e compartilhável, além das notas | Não |
 
-### US1 (escolhida)
+### 2) US escolhida pelo grupo: US1 (Yuri Peruzzo)
 
 > **COMO** aluno assinante
-> **QUERO** manter uma sequência de dias consecutivos estudando (uma "ofensiva" de estudos) e ser recompensado automaticamente ao atingir marcos, como 7 dias seguidos
+> **QUERO** manter uma sequência de dias consecutivos estudando (uma "ofensiva" de estudos) e ser
+> recompensado automaticamente ao atingir marcos, como 7 dias seguidos
 > **PARA** criar o hábito de estudar com regularidade, não só quando termino um curso inteiro.
 
-Modelamos essa mecânica na classe `SequenciaDeEstudos`, que premia a regularidade do aluno, dia após dia.
+A mecânica foi modelada na classe de domínio `SequenciaDeEstudos`, que premia a regularidade do
+aluno, dia após dia.
 
-## 3) BDD: cenários de aceite da US1
+## 3) BDD — Cenários de aceite da US1 (1 cenário por integrante)
 
-Um cenário por integrante:
-
-| Cenário | Integrante | Given | When | Then |
+| Cenário | Redigido por | Given | When | Then |
 |---|---|---|---|---|
-| 1 | Yuri Peruzzo | Dado que o aluno estudou ontem | Quando ele registra estudo hoje (dia seguinte) | Então sua sequência de dias consecutivos deve aumentar |
-| 2 | Enzo Zorzetto | Dado que o aluno tinha uma sequência de 2 dias seguidos | Quando ele deixa passar um dia sem estudar e só volta a estudar depois | Então sua sequência deve reiniciar para 1 |
-| 3 | Pedro Ricci | Dado que o aluno estudou 6 dias seguidos | Quando ele estuda no 7º dia consecutivo | Então ele deve receber 1 moeda de recompensa pela sequência |
+| 1 | **Yuri Peruzzo** | Dado que o aluno estudou ontem | Quando ele registra estudo hoje (dia seguinte) | Então sua sequência de dias consecutivos deve aumentar |
+| 2 | **Enzo Zorzetto** | Dado que o aluno tinha uma sequência de 2 dias seguidos | Quando ele deixa passar um dia sem estudar e só volta a estudar depois | Então sua sequência deve reiniciar para 1 |
+| 3 | **Pedro Ricci Gomes Nascimento** | Dado que o aluno estudou 6 dias seguidos | Quando ele estuda no 7º dia consecutivo | Então ele deve receber 1 moeda de recompensa pela sequência |
 
-## 6.1) TDD: primeiro passo, "teste para falhar" (RED)
+## 4) ATDD — Cenários automatizados em Cucumber
 
-Cada cenário de BDD virou um teste em `SequenciaDeEstudosTest`, no formato Arrange / Act / Assert:
+Os três cenários de BDD viraram Gherkin executável em
+[`src/test/resources/features/sequencia_de_estudos.feature`](src/test/resources/features/sequencia_de_estudos.feature),
+com os passos implementados em
+[`SequenciaDeEstudosStepDefinitions`](src/test/java/br/edu/gamificacaocursos/acceptance/SequenciaDeEstudosStepDefinitions.java)
+e a suíte executada por
+[`RunCucumberTest`](src/test/java/br/edu/gamificacaocursos/acceptance/RunCucumberTest.java).
+
+```gherkin
+# language: pt
+Funcionalidade: Ofensiva de estudos
+
+  Cenário: Aumentar a sequência ao estudar em dias consecutivos
+    Dado que o aluno "Rafael" estudou em "2026-09-01"
+    Quando ele registra estudo em "2026-09-02"
+    Então sua sequência de dias consecutivos deve ser 2
+
+  Cenário: Reiniciar a sequência quando o aluno deixa passar um dia
+    Dado que o aluno "Aline" estudou em "2026-09-01"
+    E que ele também estudou em "2026-09-02"
+    Quando ele deixa passar um dia e só volta a estudar em "2026-09-04"
+    Então sua sequência de dias consecutivos deve ser 1
+
+  Cenário: Receber moeda de recompensa ao completar 7 dias consecutivos
+    Dado que o aluno "Pedro" começou a estudar em "2026-09-01"
+    Quando ele estuda por 7 dias consecutivos
+    Então sua sequência de dias consecutivos deve ser 7
+    E ele deve ter 1 moeda conquistada
+```
+
+**Todos os passos são encontrados — nenhum passo indefinido.** No log do Cucumber, cada linha do
+Gherkin aparece ligada ao seu método de glue. Os cenários quebram na **regra de negócio ainda não
+implementada**, que é exatamente o RED do ATDD: um critério de aceite falhando, e não o Cucumber
+sem saber executar o passo.
+
+## 5) Domínio e teste de domínio
+
+| Camada | Pacote | Classe |
+|---|---|---|
+| Domínio (`src/main/java`) | `br.edu.gamificacaocursos.domain` | [`SequenciaDeEstudos`](src/main/java/br/edu/gamificacaocursos/domain/SequenciaDeEstudos.java) |
+| Teste de domínio (`src/test/java`) | `br.edu.gamificacaocursos.domain` | [`SequenciaDeEstudosTest`](src/test/java/br/edu/gamificacaocursos/domain/SequenciaDeEstudosTest.java) |
+| ATDD / glue (`src/test/java`) | `br.edu.gamificacaocursos.acceptance` | [`SequenciaDeEstudosStepDefinitions`](src/test/java/br/edu/gamificacaocursos/acceptance/SequenciaDeEstudosStepDefinitions.java) |
+
+## 6.1) TDD — 1º passo: "teste para falhar" (RED)
+
+Cada cenário de BDD virou também um teste de domínio em `SequenciaDeEstudosTest`, no formato
+Arrange / Act / Assert:
 
 | Cenário | Arrange (DADO) | Act (QUANDO) | Assert (ENTÃO) | Status |
 |---|---|---|---|---|
@@ -52,20 +104,14 @@ Cada cenário de BDD virou um teste em `SequenciaDeEstudosTest`, no formato Arra
 | 2 | `new SequenciaDeEstudos("Aline")`, 01/09, 02/09 e 04/09 (pulou o dia 3) | `registrarEstudo` nos três dias | `assertEquals(1, getDiasConsecutivos())` | 🔴 RED |
 | 3 | `new SequenciaDeEstudos("Pedro")`, início em 01/09 | `registrarEstudo` em 7 dias seguidos | `assertEquals(7, getDiasConsecutivos())` e `assertEquals(1, getMoedasConquistadas())` | 🔴 RED |
 
-Os três falham com `UnsupportedOperationException`, porque `SequenciaDeEstudos.registrarEstudo(...)` ainda não foi implementado:
+Os três falham com `UnsupportedOperationException`, porque
+`SequenciaDeEstudos.registrarEstudo(...)` ainda não foi implementado:
 
+```java
+public void registrarEstudo(LocalDate data) {
+    throw new UnsupportedOperationException("registrarEstudo ainda nao implementado (TDD RED).");
+}
 ```
-Tests run: 3, Failures: 0, Errors: 3, Skipped: 0
-java.lang.UnsupportedOperationException: registrarEstudo ainda nao implementado (TDD RED).
-```
-
-## 📦 Escopo desta entrega
-
-Vai até o 1º passo do TDD (RED). Os passos seguintes ficam para a próxima etapa:
-
-- [ ] **GREEN**: implementar `registrarEstudo` para fazer os testes passarem
-- [ ] **BLUE / REFACTOR**: refatorar mantendo os testes verdes
-- [ ] Cobertura **JaCoCo** 100%
 
 ## ▶️ Como rodar
 
@@ -73,26 +119,62 @@ Vai até o 1º passo do TDD (RED). Os passos seguintes ficam para a próxima eta
 mvn test
 ```
 
-Ou abrindo a pasta como projeto Maven no IntelliJ IDEA. Em ambos os casos, os 3 testes devem falhar.
+## 🔴 Evidência dos testes falhando (RED)
+
+Saída real de `mvn test` nesta entrega (bloco `Results:` do Surefire):
+
+```text
+[INFO] Results:
+[INFO]
+[ERROR] Errors:
+[ERROR]   RunCucumberTest.Aumentar a sequência ao estudar em dias consecutivos » UnsupportedOperation registrarEstudo ainda nao implementado (TDD RED).
+[ERROR]   RunCucumberTest.Receber moeda de recompensa ao completar 7 dias consecutivos » UnsupportedOperation registrarEstudo ainda nao implementado (TDD RED).
+[ERROR]   RunCucumberTest.Reiniciar a sequência quando o aluno deixa passar um dia » UnsupportedOperation registrarEstudo ainda nao implementado (TDD RED).
+[ERROR]   SequenciaDeEstudosTest.aumentaSequenciaAoEstudarEmDiasConsecutivos:19 » UnsupportedOperation registrarEstudo ainda nao implementado (TDD RED).
+[ERROR]   SequenciaDeEstudosTest.recebeMoedaAoCompletarSeteDiasConsecutivos:47 » UnsupportedOperation registrarEstudo ainda nao implementado (TDD RED).
+[ERROR]   SequenciaDeEstudosTest.reiniciaSequenciaQuandoPulaUmDiaSemEstudar:33 » UnsupportedOperation registrarEstudo ainda nao implementado (TDD RED).
+[INFO]
+[ERROR] Tests run: 6, Failures: 0, Errors: 6, Skipped: 0
+[INFO]
+[INFO] BUILD FAILURE
+```
+
+As 6 execuções são os 3 testes de domínio (`SequenciaDeEstudosTest`) e os 3 cenários de aceitação
+(`sequencia_de_estudos.feature`), todos parando no mesmo ponto:
+`SequenciaDeEstudos.registrarEstudo(...)`.
+
+| Suíte | Resultado | Por quê |
+|---|---|---|
+| `SequenciaDeEstudosTest` (3) | 🔴 3 erros | **TDD RED** — `registrarEstudo` ainda não implementado |
+| `RunCucumberTest` → `sequencia_de_estudos.feature` (3) | 🔴 3 erros | **ATDD RED** — mesma causa, alcançada através do glue |
+
+## 📁 Estrutura
+
+```text
+case-a-gamificacao-cursos/
+├── pom.xml
+├── README.md
+└── src/
+    ├── main/java/br/edu/gamificacaocursos/
+    │   ├── GamificacaoCursosApplication.java
+    │   └── domain/
+    │       └── SequenciaDeEstudos.java                      <- domínio
+    └── test/
+        ├── java/br/edu/gamificacaocursos/
+        │   ├── acceptance/
+        │   │   ├── RunCucumberTest.java                     <- runner do Cucumber
+        │   │   └── SequenciaDeEstudosStepDefinitions.java   <- ATDD
+        │   └── domain/
+        │       └── SequenciaDeEstudosTest.java              <- TDD
+        └── resources/features/
+            └── sequencia_de_estudos.feature                 <- BDD
+```
 
 ## 🛠️ Tecnologias
 
 - Java 17
 - Maven
-- JUnit Jupiter 5.10.2
-- Maven Surefire Plugin 3.2.5
-
-## 📁 Estrutura
-
-```
-case-a-gamificacao-cursos/
-├── pom.xml
-└── src/
-    ├── main/java/br/edu/exemplo/gamificacaocursos/domain/
-    │   └── SequenciaDeEstudos.java
-    └── test/java/br/edu/exemplo/gamificacaocursos/domain/
-        └── SequenciaDeEstudosTest.java
-```
-
----
-*Projeto acadêmico desenvolvido para a disciplina de Engenharia de Software / Testes de Software.*
+- Spring Boot (starter + starter-test)
+- JUnit Jupiter
+- Cucumber 7 (cucumber-java + cucumber-junit-platform-engine)
+- IntelliJ IDEA Ultimate

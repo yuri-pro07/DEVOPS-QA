@@ -1,4 +1,4 @@
-package br.edu.exemplo.gamificacaocursos.domain;
+package br.edu.gamificacaocursos.domain;
 
 import java.time.LocalDate;
 
