@@ -2,8 +2,8 @@
 
 Entrega da equipe aplicando **ATDD → BDD → TDD**.
 
-> ⚠️ **Os testes deste projeto falham de propósito.** Esta entrega vai até o 1º passo do TDD,
-> o "teste para falhar" (RED). Não é defeito — é o estado esperado desta etapa.
+> 📍 **Estado atual: GREEN.** O ciclo já passou pelo 1º passo (RED, testes falhando de propósito)
+> e pelo 2º (GREEN, implementação mínima). O 3º passo — BLUE / refatoração — ainda não foi feito.
 
 ## 👥 Equipe
 
@@ -81,9 +81,9 @@ Funcionalidade: Ofensiva de estudos
 ```
 
 **Todos os passos são encontrados — nenhum passo indefinido.** No log do Cucumber, cada linha do
-Gherkin aparece ligada ao seu método de glue. Os cenários quebram na **regra de negócio ainda não
-implementada**, que é exatamente o RED do ATDD: um critério de aceite falhando, e não o Cucumber
-sem saber executar o passo.
+Gherkin aparece ligada ao seu método de glue. No RED, os cenários quebravam na **regra de negócio
+ainda não implementada** — um critério de aceite falhando, e não o Cucumber sem saber executar o
+passo. Com o GREEN, os três cenários passam.
 
 ## 5) Domínio e teste de domínio
 
@@ -104,8 +104,8 @@ Arrange / Act / Assert:
 | 2 | `new SequenciaDeEstudos("Aline")`, 01/09, 02/09 e 04/09 (pulou o dia 3) | `registrarEstudo` nos três dias | `assertEquals(1, getDiasConsecutivos())` | 🔴 RED |
 | 3 | `new SequenciaDeEstudos("Pedro")`, início em 01/09 | `registrarEstudo` em 7 dias seguidos | `assertEquals(7, getDiasConsecutivos())` e `assertEquals(1, getMoedasConquistadas())` | 🔴 RED |
 
-Os três falham com `UnsupportedOperationException`, porque
-`SequenciaDeEstudos.registrarEstudo(...)` ainda não foi implementado:
+Nesta etapa os três falhavam com `UnsupportedOperationException`, porque
+`SequenciaDeEstudos.registrarEstudo(...)` ainda não tinha sido implementado:
 
 ```java
 public void registrarEstudo(LocalDate data) {
@@ -119,9 +119,9 @@ public void registrarEstudo(LocalDate data) {
 mvn test
 ```
 
-## 🔴 Evidência dos testes falhando (RED)
+## 🔴 1º passo — Evidência dos testes falhando (RED)
 
-Saída real de `mvn test` nesta entrega (bloco `Results:` do Surefire):
+Saída real de `mvn test` **antes** da implementação (bloco `Results:` do Surefire):
 
 ```text
 [INFO] Results:
@@ -147,6 +147,76 @@ As 6 execuções são os 3 testes de domínio (`SequenciaDeEstudosTest`) e os 3 
 |---|---|---|
 | `SequenciaDeEstudosTest` (3) | 🔴 3 erros | **TDD RED** — `registrarEstudo` ainda não implementado |
 | `RunCucumberTest` → `sequencia_de_estudos.feature` (3) | 🔴 3 erros | **ATDD RED** — mesma causa, alcançada através do glue |
+
+## 6.2) TDD — 2º passo: implementação mínima (GREEN)
+
+Com os testes em RED, `registrarEstudo(...)` foi implementado com o mínimo necessário para
+satisfazer os 3 cenários — nenhum teste foi alterado:
+
+```java
+public void registrarEstudo(LocalDate data) {
+    // TDD - GREEN: implementacao minima para os 3 cenarios de aceite da US1.
+    if (ultimoDiaEstudado != null && data.equals(ultimoDiaEstudado.plusDays(1))) {
+        diasConsecutivos = diasConsecutivos + 1;
+    } else {
+        diasConsecutivos = 1;
+    }
+
+    ultimoDiaEstudado = data;
+
+    if (diasConsecutivos == DIAS_PARA_RECOMPENSA) {
+        moedasConquistadas = moedasConquistadas + MOEDAS_POR_MARCO;
+    }
+}
+```
+
+Como cada cenário é atendido:
+
+| Cenário | Regra aplicada | Resultado |
+|---|---|---|
+| 1 — dias consecutivos | `data` é o dia seguinte ao último estudado → incrementa | `diasConsecutivos = 2` ✅ |
+| 2 — pulou um dia | 04/09 não é o dia seguinte a 02/09 → reinicia | `diasConsecutivos = 1` ✅ |
+| 3 — marco de 7 dias | ao chegar em `DIAS_PARA_RECOMPENSA`, credita a moeda | `7 dias` e `1 moeda` ✅ |
+
+## ✅ 2º passo — Evidência dos testes passando (GREEN)
+
+```text
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in br.edu.gamificacaocursos.domain.SequenciaDeEstudosTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in br.edu.gamificacaocursos.acceptance.RunCucumberTest
+[INFO]
+[INFO] Results:
+[INFO]
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0
+[INFO]
+[INFO] BUILD SUCCESS
+```
+
+O TDD e o ATDD ficaram verdes juntos: os 3 testes de domínio e os 3 cenários de aceitação passam
+com a mesma implementação, sem que nenhum teste ou passo de Gherkin fosse tocado.
+
+### Cobertura de testes (JaCoCo)
+
+```bash
+mvn clean test
+```
+
+O relatório sai em `target/site/jacoco/index.html`.
+
+| Classe | Instruções | Branches | Linhas não cobertas |
+|---|---|---|---|
+| `SequenciaDeEstudos` | 🟡 90,2% | 🟢 100% | 2 de 17 |
+| `GamificacaoCursosApplication` | 🔴 0% | — | 3 de 3 |
+| **Total** | **79,7%** | **100%** | |
+
+**Onde está o amarelo e o vermelho — e por quê:**
+
+- 🟡 `SequenciaDeEstudos` — `getAluno()` e `getUltimoDiaEstudado()` nunca são chamados pelos
+  testes. Toda a regra de negócio de `registrarEstudo(...)` está coberta, inclusive os 100% de
+  branches (dia seguinte / dia pulado / marco atingido).
+- 🔴 `GamificacaoCursosApplication` — classe de bootstrap do Spring Boot, sem teste que a exercite.
+
+Fechar esses dois pontos e chegar a 100% sem amarelo nem vermelho é tarefa do **3º passo (BLUE)**,
+que ainda não foi feito.
 
 ## 📁 Estrutura
 
@@ -177,4 +247,5 @@ case-a-gamificacao-cursos/
 - Spring Boot (starter + starter-test)
 - JUnit Jupiter
 - Cucumber 7 (cucumber-java + cucumber-junit-platform-engine)
+- JaCoCo 0.8.12 (cobertura de testes)
 - IntelliJ IDEA Ultimate

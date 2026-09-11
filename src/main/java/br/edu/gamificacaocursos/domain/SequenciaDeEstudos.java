@@ -20,7 +20,18 @@ public class SequenciaDeEstudos {
     }
 
     public void registrarEstudo(LocalDate data) {
-        throw new UnsupportedOperationException("registrarEstudo ainda nao implementado (TDD RED).");
+        // TDD - GREEN: implementacao minima para os 3 cenarios de aceite da US1.
+        if (ultimoDiaEstudado != null && data.equals(ultimoDiaEstudado.plusDays(1))) {
+            diasConsecutivos = diasConsecutivos + 1;
+        } else {
+            diasConsecutivos = 1;
+        }
+
+        ultimoDiaEstudado = data;
+
+        if (diasConsecutivos == DIAS_PARA_RECOMPENSA) {
+            moedasConquistadas = moedasConquistadas + MOEDAS_POR_MARCO;
+        }
     }
 
     public String getAluno() {
