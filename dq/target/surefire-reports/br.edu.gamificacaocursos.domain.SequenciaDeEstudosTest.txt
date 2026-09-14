@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: br.edu.gamificacaocursos.domain.SequenciaDeEstudosTest
+-------------------------------------------------------------------------------
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.194 s -- in br.edu.gamificacaocursos.domain.SequenciaDeEstudosTest
