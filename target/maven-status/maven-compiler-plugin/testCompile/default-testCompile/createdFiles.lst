@@ -1,0 +1,4 @@
+br\edu\gamificacaocursos\acceptance\RunCucumberTest.class
+br\edu\gamificacaocursos\domain\SequenciaDeEstudosTest.class
+br\edu\gamificacaocursos\GamificacaoCursosApplicationTest.class
+br\edu\gamificacaocursos\acceptance\SequenciaDeEstudosStepDefinitions.class

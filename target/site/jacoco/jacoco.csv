@@ -1,0 +1,3 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+case-a-gamificacao-cursos,br.edu.gamificacaocursos,GamificacaoCursosApplication,0,8,0,0,0,3,0,2,0,2
+case-a-gamificacao-cursos,br.edu.gamificacaocursos.domain,SequenciaDeEstudos,0,70,0,8,0,20,0,12,0,8

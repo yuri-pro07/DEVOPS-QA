@@ -2,8 +2,8 @@
 
 Entrega da equipe aplicando **ATDD → BDD → TDD**.
 
-> 📍 **Estado atual: GREEN.** O ciclo já passou pelo 1º passo (RED, testes falhando de propósito)
-> e pelo 2º (GREEN, implementação mínima). O 3º passo — BLUE / refatoração — ainda não foi feito.
+> ✅ **Ciclo TDD completo: RED → GREEN → BLUE.** Todos os testes passam e a cobertura JaCoCo
+> está em **100%**, sem amarelo nem vermelho.
 
 ## 👥 Equipe
 
@@ -194,13 +194,7 @@ Como cada cenário é atendido:
 O TDD e o ATDD ficaram verdes juntos: os 3 testes de domínio e os 3 cenários de aceitação passam
 com a mesma implementação, sem que nenhum teste ou passo de Gherkin fosse tocado.
 
-### Cobertura de testes (JaCoCo)
-
-```bash
-mvn clean test
-```
-
-O relatório sai em `target/site/jacoco/index.html`.
+### Cobertura ao final do GREEN (JaCoCo)
 
 | Classe | Instruções | Branches | Linhas não cobertas |
 |---|---|---|---|
@@ -208,15 +202,91 @@ O relatório sai em `target/site/jacoco/index.html`.
 | `GamificacaoCursosApplication` | 🔴 0% | — | 3 de 3 |
 | **Total** | **79,7%** | **100%** | |
 
-**Onde está o amarelo e o vermelho — e por quê:**
+**Onde estava o amarelo e o vermelho:**
 
-- 🟡 `SequenciaDeEstudos` — `getAluno()` e `getUltimoDiaEstudado()` nunca são chamados pelos
-  testes. Toda a regra de negócio de `registrarEstudo(...)` está coberta, inclusive os 100% de
+- 🟡 `SequenciaDeEstudos` — `getAluno()` e `getUltimoDiaEstudado()` não eram chamados por nenhum
+  teste. Toda a regra de negócio de `registrarEstudo(...)` já estava coberta, inclusive 100% de
   branches (dia seguinte / dia pulado / marco atingido).
-- 🔴 `GamificacaoCursosApplication` — classe de bootstrap do Spring Boot, sem teste que a exercite.
+- 🔴 `GamificacaoCursosApplication` — classe de bootstrap do Spring Boot, sem teste que a exercitasse.
 
-Fechar esses dois pontos e chegar a 100% sem amarelo nem vermelho é tarefa do **3º passo (BLUE)**,
-que ainda não foi feito.
+Fechar esses dois pontos foi a tarefa do 3º passo, a seguir.
+
+## 6.3) TDD — 3º passo: refatoração (BLUE)
+
+Com os testes verdes, `registrarEstudo(...)` foi refatorado para que **cada regra vire um método com
+nome**, em vez de condições soltas dentro do fluxo. O comportamento é idêntico — nenhum teste
+existente foi alterado:
+
+```java
+public void registrarEstudo(LocalDate data) {
+    this.diasConsecutivos = ehDiaSeguinteAoUltimoEstudo(data)
+            ? diasConsecutivos + 1
+            : PRIMEIRO_DIA_DA_SEQUENCIA;
+    this.ultimoDiaEstudado = data;
+
+    premiarSeAtingiuMarco();
+}
+
+private boolean ehDiaSeguinteAoUltimoEstudo(LocalDate data) {
+    return ultimoDiaEstudado != null && data.equals(ultimoDiaEstudado.plusDays(1));
+}
+
+private void premiarSeAtingiuMarco() {
+    if (diasConsecutivos == DIAS_PARA_RECOMPENSA) {
+        this.moedasConquistadas += MOEDAS_POR_MARCO;
+    }
+}
+```
+
+| O que mudou | Por quê |
+|---|---|
+| `ehDiaSeguinteAoUltimoEstudo(data)` extraído | o `if` dizia *como* verificar; o método diz *o que* se verifica |
+| `premiarSeAtingiuMarco()` extraído | separa a contagem da sequência da regra de recompensa |
+| Constante `PRIMEIRO_DIA_DA_SEQUENCIA` | elimina o número mágico `1` no reinício |
+| Javadoc na classe e no método público | documenta a intenção da mecânica |
+
+Para zerar o amarelo e o vermelho da cobertura, foram acrescentados **4 testes novos** — nenhum
+teste anterior foi tocado:
+
+| Teste novo | Cobre |
+|---|---|
+| `sequenciaNovaComecaZeradaEGuardaOAluno` | `getAluno()` e o estado inicial |
+| `guardaOUltimoDiaEstudado` | `getUltimoDiaEstudado()` |
+| `aplicacaoInicializaSemErro` | `GamificacaoCursosApplication.main(...)` |
+| `classeDeBootstrapPodeSerInstanciada` | construtor da classe de bootstrap |
+
+## ✅ 3º passo — Evidência final (BLUE): testes passando e cobertura 100%
+
+```text
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 -- in br.edu.gamificacaocursos.domain.SequenciaDeEstudosTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 -- in br.edu.gamificacaocursos.GamificacaoCursosApplicationTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0 -- in br.edu.gamificacaocursos.acceptance.RunCucumberTest
+[INFO]
+[INFO] Results:
+[INFO]
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO]
+[INFO] BUILD SUCCESS
+```
+
+Cobertura JaCoCo (`target/site/jacoco/index.html`):
+
+| Classe | Instruções | Branches | Linhas | Métodos |
+|---|---|---|---|---|
+| `SequenciaDeEstudos` | 🟢 100% | 🟢 100% | 🟢 100% | 🟢 100% |
+| `GamificacaoCursosApplication` | 🟢 100% | — | 🟢 100% | 🟢 100% |
+| **Total** | **🟢 100%** | **🟢 100%** | **🟢 100%** | **🟢 100%** |
+
+**Nenhuma classe em amarelo ou vermelho.** A coluna de branches da classe de bootstrap aparece
+vazia porque ela não tem nenhum desvio condicional.
+
+## 🔄 Resumo do ciclo TDD
+
+| Passo | O que foi feito | Testes | Cobertura |
+|---|---|---|---|
+| 🔴 **RED** | 3 testes de domínio + 3 cenários Cucumber escritos antes do código | 6 falhando | — |
+| ✅ **GREEN** | implementação mínima de `registrarEstudo(...)` | 6 passando | 🟡 79,7% |
+| 🔵 **BLUE** | extração de métodos + 4 testes de cobertura | 10 passando | 🟢 100% |
 
 ## 📁 Estrutura
 
@@ -231,6 +301,7 @@ case-a-gamificacao-cursos/
     │       └── SequenciaDeEstudos.java                      <- domínio
     └── test/
         ├── java/br/edu/gamificacaocursos/
+        │   ├── GamificacaoCursosApplicationTest.java         <- teste de fumaça
         │   ├── acceptance/
         │   │   ├── RunCucumberTest.java                     <- runner do Cucumber
         │   │   └── SequenciaDeEstudosStepDefinitions.java   <- ATDD

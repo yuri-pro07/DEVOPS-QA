@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class SequenciaDeEstudosTest {
 
@@ -49,5 +50,30 @@ class SequenciaDeEstudosTest {
 
         assertEquals(7, sequencia.getDiasConsecutivos());
         assertEquals(1, sequencia.getMoedasConquistadas());
+    }
+
+    // Testes acrescentados no BLUE para cobrir o estado da sequencia que os
+    // cenarios de aceite nao exercitavam. Nenhum teste acima foi alterado.
+
+    @Test
+    @DisplayName("BLUE: uma sequência recém-criada guarda o aluno e começa zerada, sem dia estudado")
+    void sequenciaNovaComecaZeradaEGuardaOAluno() {
+        var sequencia = new SequenciaDeEstudos("Rafael");
+
+        assertEquals("Rafael", sequencia.getAluno());
+        assertEquals(0, sequencia.getDiasConsecutivos());
+        assertEquals(0, sequencia.getMoedasConquistadas());
+        assertNull(sequencia.getUltimoDiaEstudado());
+    }
+
+    @Test
+    @DisplayName("BLUE: ao registrar um estudo, o último dia estudado passa a ser a data informada")
+    void guardaOUltimoDiaEstudado() {
+        var sequencia = new SequenciaDeEstudos("Aline");
+        var dia = LocalDate.of(2026, 9, 1);
+
+        sequencia.registrarEstudo(dia);
+
+        assertEquals(dia, sequencia.getUltimoDiaEstudado());
     }
 }
