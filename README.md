@@ -115,9 +115,30 @@ public void registrarEstudo(LocalDate data) {
 
 ## ▶️ Como rodar
 
+**Só os testes:**
+
 ```bash
-mvn test
+mvn clean test
 ```
+
+**A aplicação com H2, direto pela IDE ou pelo terminal** (perfil padrão):
+
+```bash
+mvn spring-boot:run
+```
+
+**Tudo via Docker, com PostgreSQL e pgAdmin:**
+
+```bash
+docker compose up --build
+```
+
+| Endereço | O que é |
+|---|---|
+| http://localhost:8080/ | front-end Vue |
+| http://localhost:8080/swagger-ui.html | Swagger UI |
+| http://localhost:8080/h2-console | console do H2 (só no perfil `h2`) |
+| http://localhost:5050 | pgAdmin (só via Docker) |
 
 ## 🔴 1º passo — Evidência dos testes falhando (RED)
 
@@ -280,6 +301,30 @@ Cobertura JaCoCo (`target/site/jacoco/index.html`):
 **Nenhuma classe em amarelo ou vermelho.** A coluna de branches da classe de bootstrap aparece
 vazia porque ela não tem nenhum desvio condicional.
 
+> Os números acima são os do **fechamento do ciclo TDD**, quando o projeto tinha só o domínio.
+> Depois vieram as camadas web (seções 7 a 11) com seus próprios testes: hoje `mvn clean test`
+> roda **25 testes** e a cobertura segue em **100% em todas as classes**, como mostra a seção
+> seguinte.
+
+### Cobertura atual, já com todas as camadas
+
+```text
+Tests run: 25, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+| Classe | Cobertura |
+|---|---|
+| `SequenciaDeEstudos` (domínio + entidade) | 🟢 100% |
+| `SequenciaDeEstudosService` | 🟢 100% |
+| `SequenciaDeEstudosRestController` | 🟢 100% |
+| `ApiExceptionHandler` | 🟢 100% |
+| `GamificacaoCursosApplication` | 🟢 100% |
+
+Os 25 testes são: 5 de domínio (TDD) + 3 cenários Cucumber (ATDD) + 8 de service + 7 de
+controller + 2 de bootstrap. DTOs e a classe de configuração ficam fora do relatório JaCoCo —
+são estruturas de dados e configuração, sem regra de negócio.
+
 ## 🔄 Resumo do ciclo TDD
 
 | Passo | O que foi feito | Testes | Cobertura |
@@ -288,35 +333,277 @@ vazia porque ela não tem nenhum desvio condicional.
 | ✅ **GREEN** | implementação mínima de `registrarEstudo(...)` | 6 passando | 🟡 79,7% |
 | 🔵 **BLUE** | extração de métodos + 4 testes de cobertura | 10 passando | 🟢 100% |
 
+## 7) Demais camadas — Entity, Repository, Service, DTO e Controller
+
+Com o domínio pronto e testado, a aplicação ganhou as camadas em volta dele. A regra de negócio
+**não foi reescrita em nenhuma delas** — quem sabe contar dias consecutivos e premiar o marco
+continua sendo a `SequenciaDeEstudos`.
+
+| Camada | Pacote | Classe | Papel |
+|---|---|---|---|
+| Domínio / Entity | `domain` | `SequenciaDeEstudos` | regra de negócio + mapeamento JPA (`@Entity`) |
+| Repository | `repository` | `SequenciaDeEstudosRepository` | `JpaRepository`: `findAll`, `save`, `findByAluno`… |
+| Service | `service` | `SequenciaDeEstudosService` | orquestra o caso de uso, `@Transactional` |
+| DTO | `dto` | `SequenciaDeEstudosRequestDTO`, `RegistrarEstudoRequestDTO`, `SequenciaDeEstudosResponseDTO` | contrato de entrada e saída da API |
+| Controller | `controller` | `SequenciaDeEstudosRestController` | expõe o HTTP, valida com `@Valid` |
+| Tratamento de erro | `controller` | `ApiExceptionHandler` | `@RestControllerAdvice` centraliza os erros |
+| Configuração | `config` | `OpenApiConfig` | monta a documentação OpenAPI |
+
+A entidade é a **própria classe de domínio**, seguindo o modelo visto em aula: as anotações JPA
+foram acrescentadas sem alterar nenhuma regra, e os testes do ciclo TDD continuam passando.
+
+## 8) Endpoints expostos com Swagger
+
+Com a aplicação no ar, a documentação interativa fica em:
+
+**http://localhost:8080/swagger-ui.html** — o JSON do contrato fica em `/v3/api-docs`.
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/sequencias` | lista todas as ofensivas |
+| `POST` | `/api/sequencias` | cria a ofensiva de um aluno |
+| `GET` | `/api/sequencias/{id}` | busca uma ofensiva |
+| `POST` | `/api/sequencias/{id}/estudos` | registra um dia de estudo e atualiza a sequência |
+| `DELETE` | `/api/sequencias/{id}` | remove uma ofensiva |
+
+### Evidência: a regra da US1 atravessando a API inteira
+
+```bash
+# 1) cria a sequencia do aluno
+curl -X POST http://localhost:8080/api/sequencias -H "Content-Type: application/json" -d "{\"aluno\":\"Rafael\"}"
+{"id":1,"aluno":"Rafael","diasConsecutivos":0,"ultimoDiaEstudado":null,"moedasConquistadas":0}
+
+# 2) registra 7 dias consecutivos, de 01/09 a 07/09
+curl -X POST http://localhost:8080/api/sequencias/1/estudos -H "Content-Type: application/json" -d "{\"data\":\"2026-09-01\"}"
+{"id":1,"aluno":"Rafael","diasConsecutivos":7,"ultimoDiaEstudado":"2026-09-07","moedasConquistadas":1}
+
+# 3) validacao do @Valid
+curl -X POST http://localhost:8080/api/sequencias -H "Content-Type: application/json" -d "{\"aluno\":\"\"}"
+{"erros":{"aluno":"Aluno e obrigatorio"},"status":400}
+```
+
+A moeda apareceu exatamente no 7º dia — a mesma regra construída no TDD, agora atravessando
+controller, service, repository e banco.
+
+## 9) Front-end em Vue.js
+
+Duas formas de abrir, com o mesmo código:
+
+- **Servido pela aplicação**: `src/main/resources/static/index.html` → abre em
+  **http://localhost:8080/** (mesma origem, sem CORS).
+- **Arquivo solto**: `frontend-vue/index.html` → basta abrir no navegador; aponta para
+  `http://localhost:8080` e o controller libera CORS com `@CrossOrigin`.
+
+A tela usa **Vue 3** e permite criar a ofensiva de um aluno, registrar um dia de estudo, listar as
+sequências com dias consecutivos e moedas, e remover. Os erros vindos da API aparecem na tela.
+
+## 10) Bancos: H2 e PostgreSQL
+
+Dois perfis, trocados por uma variável de ambiente — nenhuma linha de código muda:
+
+| Perfil | Arquivo | Banco | Quando é usado |
+|---|---|---|---|
+| `h2` | `application-h2.properties` | H2 em memória | padrão ao rodar pela IDE; console em `/h2-console` |
+| `postgres` | `application-postgres.properties` | PostgreSQL | ativado automaticamente no Docker |
+
+O `application.properties` define `spring.profiles.active=${SPRING_PROFILES_ACTIVE:h2}` — ou seja,
+H2 por padrão, e `postgres` quando o Compose injeta a variável.
+
+### Evidência do H2 rodando
+
+```text
+o.s.b.a.h2.H2ConsoleAutoConfiguration : H2 console available at '/h2-console'.
+                                        Database available at 'jdbc:h2:mem:gamificacaodb'
+o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http) with context path '/'
+b.e.g.GamificacaoCursosApplication      : Started GamificacaoCursosApplication
+```
+
+Console do H2: **http://localhost:8080/h2-console** — JDBC URL `jdbc:h2:mem:gamificacaodb`,
+usuário `sa`, senha em branco.
+
+### Evidência do PostgreSQL rodando
+
+Com o Compose no ar, os três contêineres sobem e a aplicação conecta no Postgres:
+
+```text
+SERVICE    STATUS                   PORTS
+app        Up 3 minutes             0.0.0.0:8080->8080/tcp
+pgadmin    Up 3 minutes             0.0.0.0:5050->80/tcp
+postgres   Up 3 minutes (healthy)   0.0.0.0:5432->5432/tcp
+```
+
+```text
+org.hibernate.Version                   : Hibernate ORM core version 6.6.26.Final
+o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http)
+b.e.g.GamificacaoCursosApplication      : Started GamificacaoCursosApplication in 11.12 seconds
+```
+
+**A tabela criada pelo Hibernate no PostgreSQL:**
+
+```text
+$ docker compose exec postgres psql -U postgres -d gamificacao_db -c "\d sequencias_de_estudos"
+
+                                  Table "public.sequencias_de_estudos"
+       Column        |          Type          | Collation | Nullable |             Default
+---------------------+------------------------+-----------+----------+----------------------------------
+ id                  | bigint                 |           | not null | generated by default as identity
+ aluno               | character varying(255) |           | not null |
+ dias_consecutivos   | integer                |           | not null |
+ moedas_conquistadas | integer                |           | not null |
+ ultimo_dia_estudado | date                   |           |          |
+Indexes:
+    "sequencias_de_estudos_pkey" PRIMARY KEY, btree (id)
+```
+
+**Os dados gravados, depois de registrar 7 dias consecutivos pela API:**
+
+```text
+$ docker compose exec postgres psql -U postgres -d gamificacao_db -c "SELECT * FROM sequencias_de_estudos;"
+
+ id | aluno  | dias_consecutivos | moedas_conquistadas | ultimo_dia_estudado
+----+--------+-------------------+---------------------+---------------------
+  1 | Rafael |                 7 |                   1 | 2026-09-07
+(1 row)
+
+$ docker compose exec postgres psql -U postgres -d gamificacao_db -tc "SELECT version();"
+ PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, 64-bit
+```
+
+A regra da US1 chegou íntegra até o banco: `dias_consecutivos = 7` e `moedas_conquistadas = 1`.
+
+**pgAdmin:** http://localhost:5050 (`admin@admin.com` / `admin`). Para registrar o servidor:
+host `postgres`, porta `5432`, banco `gamificacao_db`, usuário e senha `postgres`.
+
+> Note que no perfil `postgres` o `/h2-console` responde **404** — é o esperado: o console do H2 só
+> existe no perfil `h2`. É justamente essa diferença que comprova que a aplicação, dentro do
+> Docker, está mesmo no PostgreSQL e não no H2.
+
+## 11) Rodando via Docker
+
+```bash
+docker compose up --build
+```
+
+Sobem três contêineres:
+
+| Serviço | Imagem | Porta | Para quê |
+|---|---|---|---|
+| `postgres` | `postgres:16` | 5432 | banco de dados |
+| `pgadmin` | `dpage/pgadmin4:9` | 5050 | administrar o banco pelo navegador |
+| `app` | build do `Dockerfile` | 8080 | a aplicação, no perfil `postgres` |
+
+O `Dockerfile` usa **build em dois estágios**: o primeiro compila com Maven, o segundo copia apenas
+o `.jar` para uma imagem JRE enxuta. O serviço `app` só inicia depois que o `healthcheck` do
+Postgres passa (`depends_on: condition: service_healthy`), evitando o erro clássico de a aplicação
+subir antes do banco estar pronto.
+
+Com tudo no ar:
+
+- Aplicação e front-end: **http://localhost:8080/**
+- Swagger: **http://localhost:8080/swagger-ui.html**
+- pgAdmin: **http://localhost:5050**
+
+Para derrubar: `docker compose down` — ou `docker compose down -v` para apagar também os volumes.
+
+## 📸 Evidências em imagem
+
+Todos os prints ficam em [`docs/evidencias/`](docs/evidencias/).
+
+### Aplicação rodando via Docker
+
+As três imagens construídas e em uso — `postgres:16`, `dpage/pgadmin4:9` e a `dq-app`, gerada pelo
+`Dockerfile` do projeto:
+
+![Imagens no Docker](docs/evidencias/01-docker-images.png)
+
+Os contêineres correspondentes, com o `healthcheck` do banco:
+
+```text
+SERVICE    STATUS                   PORTS
+app        Up 3 minutes             0.0.0.0:8080->8080/tcp
+pgadmin    Up 3 minutes             0.0.0.0:5050->80/tcp
+postgres   Up 3 minutes (healthy)   0.0.0.0:5432->5432/tcp
+```
+
+### Endpoints expostos com Swagger
+
+Os cinco endpoints documentados e os três DTOs em *Schemas*:
+
+![Swagger UI](docs/evidencias/02-swagger-ui.png)
+
+### Front-end em Vue.js
+
+A tela consumindo a API, com os dias consecutivos e as moedas de cada aluno:
+
+![Front-end Vue](docs/evidencias/03-frontend-vue.png)
+
+### PostgreSQL rodando
+
+Consulta no pgAdmin mostrando a linha gravada pela API — `dias_consecutivos = 7` e
+`moedas_conquistadas = 1`, exatamente a regra da US1 ao completar a ofensiva de 7 dias:
+
+![PostgreSQL no pgAdmin](docs/evidencias/04-postgres-pgadmin.png)
+
+### H2 rodando
+
+O mesmo esquema no H2 em memória, com a JDBC URL `jdbc:h2:mem:gamificacaodb` visível na árvore à
+esquerda. É a mesma aplicação, só trocando o perfil — nenhuma linha de código muda:
+
+![Console do H2](docs/evidencias/05-h2-console.png)
+
 ## 📁 Estrutura
 
 ```text
 case-a-gamificacao-cursos/
 ├── pom.xml
 ├── README.md
+├── Dockerfile                  <- build em 2 estagios
+├── docker-compose.yml          <- app + postgres + pgadmin
+├── .dockerignore
+├── docs/evidencias/            <- prints das evidencias
+├── frontend-vue/
+│   └── index.html              <- front Vue standalone
 └── src/
-    ├── main/java/br/edu/gamificacaocursos/
-    │   ├── GamificacaoCursosApplication.java
-    │   └── domain/
-    │       └── SequenciaDeEstudos.java                      <- domínio
+    ├── main/
+    │   ├── java/br/edu/gamificacaocursos/
+    │   │   ├── GamificacaoCursosApplication.java
+    │   │   ├── config/OpenApiConfig.java                    <- Swagger
+    │   │   ├── controller/
+    │   │   │   ├── SequenciaDeEstudosRestController.java    <- endpoints REST
+    │   │   │   └── ApiExceptionHandler.java
+    │   │   ├── domain/SequenciaDeEstudos.java               <- dominio + @Entity
+    │   │   ├── dto/
+    │   │   │   ├── SequenciaDeEstudosRequestDTO.java
+    │   │   │   ├── RegistrarEstudoRequestDTO.java
+    │   │   │   └── SequenciaDeEstudosResponseDTO.java
+    │   │   ├── repository/SequenciaDeEstudosRepository.java
+    │   │   └── service/SequenciaDeEstudosService.java
+    │   └── resources/
+    │       ├── application.properties
+    │       ├── application-h2.properties
+    │       ├── application-postgres.properties
+    │       └── static/index.html                            <- front Vue servido pelo Spring
     └── test/
         ├── java/br/edu/gamificacaocursos/
-        │   ├── GamificacaoCursosApplicationTest.java         <- teste de fumaça
+        │   ├── GamificacaoCursosApplicationTest.java
         │   ├── acceptance/
         │   │   ├── RunCucumberTest.java                     <- runner do Cucumber
         │   │   └── SequenciaDeEstudosStepDefinitions.java   <- ATDD
-        │   └── domain/
-        │       └── SequenciaDeEstudosTest.java              <- TDD
+        │   ├── controller/SequenciaDeEstudosRestControllerTest.java
+        │   ├── domain/SequenciaDeEstudosTest.java           <- TDD
+        │   └── service/SequenciaDeEstudosServiceTest.java
         └── resources/features/
             └── sequencia_de_estudos.feature                 <- BDD
 ```
 
 ## 🛠️ Tecnologias
 
-- Java 17
-- Maven
-- Spring Boot (starter + starter-test)
-- JUnit Jupiter
-- Cucumber 7 (cucumber-java + cucumber-junit-platform-engine)
+- Java 17 e Maven
+- Spring Boot 3.5.5 — Web, Data JPA, Validation
+- Banco H2 (perfil `h2`) e PostgreSQL 16 (perfil `postgres`)
+- springdoc-openapi 2.8.11 (Swagger UI)
+- Vue.js 3
+- Docker e Docker Compose (app + postgres + pgadmin)
+- JUnit Jupiter e Cucumber 7 (cucumber-java + cucumber-junit-platform-engine)
 - JaCoCo 0.8.12 (cobertura de testes)
 - IntelliJ IDEA Ultimate
