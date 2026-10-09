@@ -1,24 +1,18 @@
-package br.edu.gamificacaocursos.service;
+package br.edu.gamificacaocursos.ofensiva.application;
 
-import br.edu.gamificacaocursos.domain.SequenciaDeEstudos;
-import br.edu.gamificacaocursos.dto.SequenciaDeEstudosResponseDTO;
-import br.edu.gamificacaocursos.repository.SequenciaDeEstudosRepository;
+import br.edu.gamificacaocursos.ofensiva.domain.SequenciaDeEstudos;
+import br.edu.gamificacaocursos.ofensiva.api.SequenciaDeEstudosResponseDTO;
+import br.edu.gamificacaocursos.ofensiva.internal.persistence.SequenciaDeEstudosRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
 
-// Camada: SERVICE.
-// Orquestra o caso de uso e delega a regra de negocio ao dominio.
-// Repare que a regra da ofensiva NAO e reimplementada aqui: quem sabe
-// contar dias consecutivos e premiar o marco e a SequenciaDeEstudos.
 @Service
 public class SequenciaDeEstudosService {
-
     private final SequenciaDeEstudosRepository repository;
 
-    // Injecao de dependencia por construtor: o Spring entrega o repository.
     public SequenciaDeEstudosService(SequenciaDeEstudosRepository repository) {
         this.repository = repository;
     }
@@ -43,7 +37,6 @@ public class SequenciaDeEstudosService {
     public SequenciaDeEstudosResponseDTO registrarEstudo(Long id, LocalDate data) {
         SequenciaDeEstudos sequencia = buscarEntidade(id);
 
-        // A regra de negocio vive no dominio.
         sequencia.registrarEstudo(data);
 
         return toDTO(repository.save(sequencia));

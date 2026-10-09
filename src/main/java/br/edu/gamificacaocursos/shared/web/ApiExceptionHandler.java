@@ -1,4 +1,4 @@
-package br.edu.gamificacaocursos.controller;
+package br.edu.gamificacaocursos.shared.web;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,11 +10,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
-// Camada: WEB / SUPORTE A CONTROLLER.
-// Centraliza o tratamento de erros da API em um unico lugar.
 @RestControllerAdvice
 public class ApiExceptionHandler {
-
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleRegraDeNegocio(IllegalArgumentException ex) {
         Map<String, Object> body = new HashMap<>();
@@ -24,7 +21,6 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
-    // Trata os erros disparados pelo @Valid nos controllers.
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidacao(MethodArgumentNotValidException ex) {
         Map<String, Object> body = new HashMap<>();

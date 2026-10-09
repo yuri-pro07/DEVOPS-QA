@@ -1,4 +1,4 @@
-package br.edu.gamificacaocursos.acceptance;
+package br.edu.gamificacaocursos.ofensiva.acceptance;
 
 import org.junit.platform.suite.api.ConfigurationParameter;
 import org.junit.platform.suite.api.IncludeEngines;
@@ -11,7 +11,7 @@ import static io.cucumber.junit.platform.engine.Constants.PLUGIN_PROPERTY_NAME;
 @Suite
 @IncludeEngines("cucumber")
 @SelectClasspathResource("features")
-@ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "br.edu.gamificacaocursos.acceptance")
+@ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "br.edu.gamificacaocursos.ofensiva.acceptance")
 @ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty")
 public class RunCucumberTest {
 }

@@ -1,4 +1,4 @@
-package br.edu.gamificacaocursos.config;
+package br.edu.gamificacaocursos.shared.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
@@ -6,11 +6,8 @@ import io.swagger.v3.oas.models.info.Info;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-// Camada: CONFIGURACAO.
-// Monta a documentacao OpenAPI que o Swagger UI exibe em /swagger-ui.html
 @Configuration
 public class OpenApiConfig {
-
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI().info(new Info()

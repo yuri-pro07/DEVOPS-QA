@@ -1,0 +1,17 @@
+ANTES - organizacao por camada tecnica (commit 2b6f6b2)
+=======================================================
+
+Pacotes de primeiro nivel: 7
+Pacotes no total: 7
+
+Dependencias entre pacotes (origem -> destino: nro de imports):
+  controller                   -> dto                          3
+  controller                   -> service                      1
+  repository                   -> domain                       1
+  service                      -> domain                       1
+  service                      -> dto                          1
+  service                      -> repository                   1
+
+Total de dependencias entre pacotes: 8
+Dependencias que cruzam o primeiro nivel: 8
+

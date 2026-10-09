@@ -1,6 +1,6 @@
-package br.edu.gamificacaocursos.acceptance;
+package br.edu.gamificacaocursos.ofensiva.acceptance;
 
-import br.edu.gamificacaocursos.domain.SequenciaDeEstudos;
+import br.edu.gamificacaocursos.ofensiva.domain.SequenciaDeEstudos;
 import io.cucumber.java.pt.Dado;
 import io.cucumber.java.pt.E;
 import io.cucumber.java.pt.Entao;
@@ -10,16 +10,7 @@ import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * ATDD - glue dos cenarios do Case A.
- *
- * Os passos apenas conduzem o dominio; nenhuma regra de negocio mora aqui.
- * Enquanto SequenciaDeEstudos.registrarEstudo(...) nao estiver implementado,
- * os tres cenarios permanecem RED por causa da regra ausente - e nao por
- * passo indefinido.
- */
 public class SequenciaDeEstudosStepDefinitions {
-
     private SequenciaDeEstudos sequencia;
     private LocalDate primeiroDia;
 

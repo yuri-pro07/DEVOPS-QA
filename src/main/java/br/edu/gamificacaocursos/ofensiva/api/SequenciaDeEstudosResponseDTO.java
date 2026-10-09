@@ -1,10 +1,8 @@
-package br.edu.gamificacaocursos.dto;
+package br.edu.gamificacaocursos.ofensiva.api;
 
 import java.time.LocalDate;
 
-// DTO de saida da API: o que o front-end enxerga da ofensiva de estudos.
 public class SequenciaDeEstudosResponseDTO {
-
     private Long id;
     private String aluno;
     private int diasConsecutivos;

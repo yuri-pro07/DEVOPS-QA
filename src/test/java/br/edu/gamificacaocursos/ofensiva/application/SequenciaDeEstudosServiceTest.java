@@ -1,7 +1,7 @@
-package br.edu.gamificacaocursos.service;
+package br.edu.gamificacaocursos.ofensiva.application;
 
-import br.edu.gamificacaocursos.domain.SequenciaDeEstudos;
-import br.edu.gamificacaocursos.repository.SequenciaDeEstudosRepository;
+import br.edu.gamificacaocursos.ofensiva.domain.SequenciaDeEstudos;
+import br.edu.gamificacaocursos.ofensiva.internal.persistence.SequenciaDeEstudosRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,11 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// Testes da camada SERVICE rodando contra o H2 em memoria.
 @SpringBootTest
 @ActiveProfiles("h2")
 class SequenciaDeEstudosServiceTest {
-
     @Autowired
     private SequenciaDeEstudosService service;
 

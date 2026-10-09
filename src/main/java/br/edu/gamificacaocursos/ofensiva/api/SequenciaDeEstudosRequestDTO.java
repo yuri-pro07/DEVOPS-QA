@@ -1,10 +1,8 @@
-package br.edu.gamificacaocursos.dto;
+package br.edu.gamificacaocursos.ofensiva.api;
 
 import jakarta.validation.constraints.NotBlank;
 
-// DTO de entrada para criar a ofensiva de estudos de um aluno.
 public class SequenciaDeEstudosRequestDTO {
-
     @NotBlank(message = "Aluno e obrigatorio")
     private String aluno;
 

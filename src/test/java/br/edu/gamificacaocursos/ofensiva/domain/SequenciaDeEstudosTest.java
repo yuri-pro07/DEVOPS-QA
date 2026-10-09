@@ -1,4 +1,4 @@
-package br.edu.gamificacaocursos.domain;
+package br.edu.gamificacaocursos.ofensiva.domain;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class SequenciaDeEstudosTest {
-
     @Test
     @DisplayName("Cenário 1 (Yuri Peruzzo): dado que o aluno estudou ontem, quando ele registra estudo hoje, então sua sequência de dias consecutivos deve aumentar")
     void aumentaSequenciaAoEstudarEmDiasConsecutivos() {
@@ -51,9 +50,6 @@ class SequenciaDeEstudosTest {
         assertEquals(7, sequencia.getDiasConsecutivos());
         assertEquals(1, sequencia.getMoedasConquistadas());
     }
-
-    // Testes acrescentados no BLUE para cobrir o estado da sequencia que os
-    // cenarios de aceite nao exercitavam. Nenhum teste acima foi alterado.
 
     @Test
     @DisplayName("BLUE: uma sequência recém-criada guarda o aluno e começa zerada, sem dia estudado")

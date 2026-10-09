@@ -1,9 +1,6 @@
-package br.edu.gamificacaocursos.controller;
+package br.edu.gamificacaocursos.ofensiva.api;
 
-import br.edu.gamificacaocursos.dto.RegistrarEstudoRequestDTO;
-import br.edu.gamificacaocursos.dto.SequenciaDeEstudosRequestDTO;
-import br.edu.gamificacaocursos.dto.SequenciaDeEstudosResponseDTO;
-import br.edu.gamificacaocursos.service.SequenciaDeEstudosService;
+import br.edu.gamificacaocursos.ofensiva.application.SequenciaDeEstudosService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -12,14 +9,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-// Camada: CONTROLLER.
-// Conversa com HTTP: recebe a requisicao, chama o service e devolve JSON.
 @RestController
 @RequestMapping("/api/sequencias")
 @CrossOrigin(origins = "*")
 @Tag(name = "Sequencias de Estudos", description = "Ofensiva de estudos do aluno (US1 do Case A)")
 public class SequenciaDeEstudosRestController {
-
     private final SequenciaDeEstudosService service;
 
     public SequenciaDeEstudosRestController(SequenciaDeEstudosService service) {

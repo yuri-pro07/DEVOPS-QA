@@ -1,0 +1,16 @@
+DEPOIS - organizacao por modulo de capacidade de negocio
+========================================================
+
+Pacotes de primeiro nivel: 3
+Pacotes no total: 9
+
+Dependencias entre pacotes (origem -> destino: nro de imports):
+  ofensiva.api                 -> ofensiva.application         1
+  ofensiva.application         -> ofensiva.api                 1
+  ofensiva.application         -> ofensiva.domain              1
+  ofensiva.application         -> ofensiva.internal.persistence 1
+  ofensiva.internal.persistence -> ofensiva.domain              1
+
+Total de dependencias entre pacotes: 5
+Dependencias que cruzam o primeiro nivel: 0
+

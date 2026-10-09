@@ -93,7 +93,7 @@ createApp({
             const texto = await resposta.text();
             if (!resposta.ok) {
                 let detalhe = texto;
-                try { detalhe = JSON.parse(texto).erro || texto; } catch (e) { /* resposta nao-JSON */ }
+                try { detalhe = JSON.parse(texto).erro || texto; } catch (e) { }
                 throw new Error(detalhe || 'Erro na requisicao');
             }
             return texto ? JSON.parse(texto) : null;

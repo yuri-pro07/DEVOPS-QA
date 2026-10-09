@@ -1,6 +1,6 @@
-package br.edu.gamificacaocursos.controller;
+package br.edu.gamificacaocursos.ofensiva.api;
 
-import br.edu.gamificacaocursos.repository.SequenciaDeEstudosRepository;
+import br.edu.gamificacaocursos.ofensiva.internal.persistence.SequenciaDeEstudosRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,13 +18,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-// Testes da camada CONTROLLER: exercitam os endpoints REST de ponta a ponta,
-// passando por service, repository e banco H2.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("h2")
 class SequenciaDeEstudosRestControllerTest {
-
     @Autowired
     private MockMvc mockMvc;
 
