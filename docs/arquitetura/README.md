@@ -26,6 +26,10 @@ matriz de ASRs, um ADR e a visão C4 afetada.
 
 # DESAFIO 1 — Drivers e evolução do Core
 
+> **Prática B1 — itens 1 a 4** (leitura da solução proposta, análise do legado e estudo
+> dos dois códigos-modelo) está em [`pratica-b1.md`](pratica-b1.md), com as quatro bases
+> medidas pela mesma ferramenta de dependências.
+
 > **Cadeia de rastreabilidade:** RF → RNF → ASR + RPC → alternativas/trade-offs → ADR → C4 → evidência.
 > Cada seção abaixo é um elo; o resumo fechado está em [Rastreabilidade](#9-rastreabilidade-do-desafio-1).
 

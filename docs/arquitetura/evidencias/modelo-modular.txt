@@ -1,0 +1,33 @@
+MODELO DE REFERENCIA - Monolito Modular
+=======================================
+
+Pacotes de primeiro nivel: 6
+Pacotes no total: 22
+
+Dependencias entre pacotes (origem -> destino: nro de imports):
+  curso.api                    -> curso.application            1
+  curso.application            -> curso.api                    2
+  curso.application            -> curso.domain                 1
+  curso.application            -> curso.internal.persistence   1
+  curso.internal.persistence   -> curso.domain                 1
+  matricula.api                -> matricula.application        1
+  matricula.application        -> curso.domain                 1
+  matricula.application        -> curso.internal.persistence   1
+  matricula.application        -> matricula.api                1
+  matricula.application        -> matricula.domain             2
+  matricula.application        -> matricula.internal.persistence 1
+  matricula.application        -> usuario.domain               2
+  matricula.application        -> usuario.internal.persistence 2
+  matricula.internal.persistence -> matricula.domain             1
+  ranking.api                  -> ranking.application          1
+  ranking.application          -> ranking.api                  1
+  ranking.application          -> ranking.internal.persistence 1
+  ranking.internal.persistence -> usuario.domain               1
+  usuario.api                  -> usuario.application          1
+  usuario.application          -> usuario.api                  2
+  usuario.application          -> usuario.domain               2
+  usuario.application          -> usuario.internal.persistence 1
+  usuario.internal.persistence -> usuario.domain               2
+
+Total de dependencias entre pacotes: 30
+Dependencias que cruzam o primeiro nivel: 7

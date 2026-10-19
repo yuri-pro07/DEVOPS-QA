@@ -1,0 +1,17 @@
+MODELO DE REFERENCIA - Monolito em Camadas
+==========================================
+
+Pacotes de primeiro nivel: 7
+Pacotes no total: 8
+
+Dependencias entre pacotes (origem -> destino: nro de imports):
+  controller                   -> dto                          8
+  controller                   -> service                      4
+  domain                       -> domain.vo                    5
+  repository                   -> domain                       5
+  service                      -> domain                       8
+  service                      -> dto                          6
+  service                      -> repository                   7
+
+Total de dependencias entre pacotes: 43
+Dependencias que cruzam o primeiro nivel: 38

@@ -18,7 +18,8 @@ def coletar(base):
     return sorted(arquivos)
 
 
-def analisar(base):
+def analisar(base, raiz=None):
+    raiz = raiz or RAIZ
     arestas = {}
     pacotes = set()
     for arq in coletar(base):
@@ -26,9 +27,9 @@ def analisar(base):
         pacotes.add(pkg)
         texto = io.open(arq, encoding='utf-8').read()
         for imp in re.findall(r'^import\s+(?:static\s+)?([\w.]+);', texto, re.M):
-            if not imp.startswith(RAIZ):
+            if not imp.startswith(raiz):
                 continue
-            destino = imp[len(RAIZ):].lstrip('.')
+            destino = imp[len(raiz):].lstrip('.')
             destino = '.'.join(destino.split('.')[:-1]) or '(raiz)'
             if destino != pkg:
                 arestas.setdefault(pkg, {}).setdefault(destino, 0)
@@ -36,8 +37,8 @@ def analisar(base):
     return arestas, pacotes
 
 
-def relatorio(base, titulo):
-    arestas, pacotes = analisar(base)
+def relatorio(base, titulo, raiz=None):
+    arestas, pacotes = analisar(base, raiz)
     linhas = [titulo, '=' * len(titulo), '']
     linhas.append('Pacotes de primeiro nivel: %d' % len({p.split('.')[0] for p in pacotes}))
     linhas.append('Pacotes no total: %d' % len(pacotes))
@@ -60,4 +61,4 @@ def relatorio(base, titulo):
 
 if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8')
-    print(relatorio(sys.argv[1], sys.argv[2]))
+    print(relatorio(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None))
