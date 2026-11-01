@@ -3,6 +3,8 @@ package br.edu.gamificacaocursos.ofensiva.application;
 import br.edu.gamificacaocursos.ofensiva.domain.SequenciaDeEstudos;
 import br.edu.gamificacaocursos.ofensiva.api.SequenciaDeEstudosResponseDTO;
 import br.edu.gamificacaocursos.ofensiva.internal.persistence.SequenciaDeEstudosRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,9 +14,17 @@ import java.util.List;
 @Service
 public class SequenciaDeEstudosService {
     private final SequenciaDeEstudosRepository repository;
+    private final Counter estudosRegistrados;
+    private final Counter moedasConcedidas;
 
-    public SequenciaDeEstudosService(SequenciaDeEstudosRepository repository) {
+    public SequenciaDeEstudosService(SequenciaDeEstudosRepository repository, MeterRegistry metricas) {
         this.repository = repository;
+        this.estudosRegistrados = Counter.builder("gamificacao.ofensiva.estudos")
+                .description("Dias de estudo registrados")
+                .register(metricas);
+        this.moedasConcedidas = Counter.builder("gamificacao.ofensiva.moedas")
+                .description("Moedas concedidas por ofensivas completas")
+                .register(metricas);
     }
 
     public List<SequenciaDeEstudosResponseDTO> listarTodas() {
@@ -36,10 +46,14 @@ public class SequenciaDeEstudosService {
     @Transactional
     public SequenciaDeEstudosResponseDTO registrarEstudo(Long id, LocalDate data) {
         SequenciaDeEstudos sequencia = buscarEntidade(id);
+        int moedasAntes = sequencia.getMoedasConquistadas();
 
         sequencia.registrarEstudo(data);
+        SequenciaDeEstudosResponseDTO resposta = toDTO(repository.save(sequencia));
 
-        return toDTO(repository.save(sequencia));
+        estudosRegistrados.increment();
+        moedasConcedidas.increment(sequencia.getMoedasConquistadas() - moedasAntes);
+        return resposta;
     }
 
     @Transactional

@@ -5,12 +5,16 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "sequencias_de_estudos")
+@Table(name = "sequencias_de_estudos", indexes = {
+        @Index(name = "idx_ranking", columnList = "moedas_conquistadas DESC, dias_consecutivos DESC, aluno"),
+        @Index(name = "idx_aluno", columnList = "aluno")
+})
 public class SequenciaDeEstudos {
     static final int DIAS_PARA_RECOMPENSA = 7;
     static final int MOEDAS_POR_MARCO = 1;
@@ -32,7 +36,7 @@ public class SequenciaDeEstudos {
     @Column(name = "moedas_conquistadas", nullable = false)
     private int moedasConquistadas;
 
-        protected SequenciaDeEstudos() {
+    protected SequenciaDeEstudos() {
     }
 
     public SequenciaDeEstudos(String aluno) {

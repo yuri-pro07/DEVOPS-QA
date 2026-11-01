@@ -58,9 +58,42 @@ services:
     networks:
       - app_net
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: gamificacao-prometheus
+    restart: always
+    depends_on:
+      - app
+    volumes:
+      - ./observabilidade/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - app_net
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: gamificacao-grafana
+    restart: always
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/gamificacao.json
+    volumes:
+      - ./observabilidade/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidade/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - app_net
+
 volumes:
   postgres_data:
   pgadmin_data:
+  grafana_data:
 
 networks:
   app_net:

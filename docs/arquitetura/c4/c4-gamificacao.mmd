@@ -1,0 +1,39 @@
+C4Component
+    title C4: Plataforma de Gamificação, Core como Monólito Modular
+
+    Person(aluno, "Aluno assinante", "Registra estudos e acompanha o ranking")
+    Person(admin, "Administrador", "Acompanha engajamento e operação")
+
+    Container(web, "Interface Web", "Vue 3", "Ofensiva, registro de estudos e ranking")
+
+    Container_Boundary(core, "Core de Gamificação (Java 17, Spring Boot 3.5, um único deploy)") {
+        Component(ofApi, "ofensiva.api", "Spring MVC", "Controller REST e DTOs da ofensiva")
+        Component(ofApp, "ofensiva.application", "Spring Service", "Registra estudos e publica métricas de estudos e moedas")
+        Component(ofDom, "ofensiva.domain", "Entidade JPA", "Regra da ofensiva e da recompensa")
+        Component(ofPer, "ofensiva.internal.persistence", "Spring Data JPA", "Repositório interno do módulo")
+        Component(rkApi, "ranking.api", "Spring MVC", "Controller REST e DTOs do ranking")
+        Component(rkApp, "ranking.application", "Spring Service", "Página de até 100 itens, posição do aluno e métrica de latência")
+        Component(rkPer, "ranking.internal.persistence", "Spring Data JPA", "Consulta paginada e projetada no índice idx_ranking")
+        Component(actuator, "Actuator + Micrometer", "Spring Boot", "Expõe /actuator/prometheus")
+    }
+
+    ContainerDb(banco, "Banco de Dados", "PostgreSQL 16", "100.000 alunos, índices idx_ranking e idx_aluno")
+    Container(prometheus, "Prometheus", "prom/prometheus 2.54", "Coleta métricas a cada 5 segundos")
+    Container(grafana, "Grafana", "grafana 11.2", "Painéis de ranking, HTTP, JVM e negócio")
+
+    Rel(aluno, web, "Usa", "HTTPS")
+    Rel(admin, grafana, "Acompanha painéis", "HTTPS")
+    Rel(web, ofApi, "Ofensiva", "JSON/HTTPS")
+    Rel(web, rkApi, "Ranking", "JSON/HTTPS")
+    Rel(ofApi, ofApp, "Chama")
+    Rel(ofApp, ofDom, "Aplica a regra")
+    Rel(ofApp, ofPer, "Persiste")
+    Rel(rkApi, rkApp, "Chama")
+    Rel(rkApp, rkPer, "Consulta")
+    Rel(rkPer, ofDom, "Lê a entidade, somente leitura")
+    Rel(ofPer, banco, "Lê e grava", "JDBC")
+    Rel(rkPer, banco, "Lê", "JDBC")
+    Rel(prometheus, actuator, "Coleta", "HTTP")
+    Rel(grafana, prometheus, "Consulta séries", "PromQL")
+
+    UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="1")

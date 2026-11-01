@@ -21,6 +21,8 @@ matriz de ASRs, um ADR e a visão C4 afetada.
 | ASR-01 | Regras de gamificação mudam com frequência e a mudança não pode se espalhar pelo sistema | Supportability — manutenibilidade | RF01, RF02 | 1 | ADR-001 |
 | ASR-02 | Leitura de ranking cresce de forma desproporcional às demais funcionalidades | Performance — escalabilidade | RF01 | 1 | ADR-001 |
 | ASR-03 | A operação precisa caber em uma equipe de 3 pessoas, sem time de plataforma | Supportability — complexidade operacional | RPC-02 | 1 | ADR-001 |
+| ASR-04 | O ranking precisa atender 100.000 alunos sem degradar | Performance — desempenho | RF01 | AC2 | ADR-002 |
+| ASR-05 | As hipóteses de desempenho precisam ser verificáveis em execução | Supportability — observabilidade | ASR-02, ASR-04 | AC2 | ADR-003 |
 
 ---
 
@@ -388,3 +390,295 @@ RF02 Conquistas ──────┤
                       ▼
       Evidência: 8 → 0 dependências cruzando o topo, com 25 testes verdes
 ```
+
+---
+
+# ENTREGA AC2 — itens 6 e 7
+
+Esta seção atende os dois últimos itens pedidos para o README do Exercício B1: o **diagrama C4** e a
+evolução do **legado da AC1** (implementação do Ranking para 100.000 alunos, comparação Monólito
+Modular × Camadas, cobertura de 100%, observabilidade com Grafana/Prometheus e caso de teste com
+Mockito). Os itens 1 a 5 (RF, RNF, ASR, RPC e ADR) estão no Desafio 1, acima.
+
+## 6) Diagrama C4 em código Mermaid
+
+Um único diagrama reúne as três visões: as pessoas e os sistemas externos (contexto), a Interface
+Web, o banco, o Prometheus e o Grafana (containers) e, dentro do Core, os módulos `ofensiva` e
+`ranking` com suas camadas internas (componentes). Assim a fronteira do monólito modular, a única
+dependência entre módulos (`ranking.internal.persistence → ofensiva.domain`, somente leitura) e o
+caminho da observabilidade aparecem na mesma figura. O GitHub renderiza o código direto nesta
+página, e o fonte está versionado em [`c4-gamificacao.mmd`](c4/c4-gamificacao.mmd).
+
+```mermaid
+C4Component
+    title C4: Plataforma de Gamificação, Core como Monólito Modular
+
+    Person(aluno, "Aluno assinante", "Registra estudos e acompanha o ranking")
+    Person(admin, "Administrador", "Acompanha engajamento e operação")
+
+    Container(web, "Interface Web", "Vue 3", "Ofensiva, registro de estudos e ranking")
+
+    Container_Boundary(core, "Core de Gamificação (Java 17, Spring Boot 3.5, um único deploy)") {
+        Component(ofApi, "ofensiva.api", "Spring MVC", "Controller REST e DTOs da ofensiva")
+        Component(ofApp, "ofensiva.application", "Spring Service", "Registra estudos e publica métricas de estudos e moedas")
+        Component(ofDom, "ofensiva.domain", "Entidade JPA", "Regra da ofensiva e da recompensa")
+        Component(ofPer, "ofensiva.internal.persistence", "Spring Data JPA", "Repositório interno do módulo")
+        Component(rkApi, "ranking.api", "Spring MVC", "Controller REST e DTOs do ranking")
+        Component(rkApp, "ranking.application", "Spring Service", "Página de até 100 itens, posição do aluno e métrica de latência")
+        Component(rkPer, "ranking.internal.persistence", "Spring Data JPA", "Consulta paginada e projetada no índice idx_ranking")
+        Component(actuator, "Actuator + Micrometer", "Spring Boot", "Expõe /actuator/prometheus")
+    }
+
+    ContainerDb(banco, "Banco de Dados", "PostgreSQL 16", "100.000 alunos, índices idx_ranking e idx_aluno")
+    Container(prometheus, "Prometheus", "prom/prometheus 2.54", "Coleta métricas a cada 5 segundos")
+    Container(grafana, "Grafana", "grafana 11.2", "Painéis de ranking, HTTP, JVM e negócio")
+
+    Rel(aluno, web, "Usa", "HTTPS")
+    Rel(admin, grafana, "Acompanha painéis", "HTTPS")
+    Rel(web, ofApi, "Ofensiva", "JSON/HTTPS")
+    Rel(web, rkApi, "Ranking", "JSON/HTTPS")
+    Rel(ofApi, ofApp, "Chama")
+    Rel(ofApp, ofDom, "Aplica a regra")
+    Rel(ofApp, ofPer, "Persiste")
+    Rel(rkApi, rkApp, "Chama")
+    Rel(rkApp, rkPer, "Consulta")
+    Rel(rkPer, ofDom, "Lê a entidade, somente leitura")
+    Rel(ofPer, banco, "Lê e grava", "JDBC")
+    Rel(rkPer, banco, "Lê", "JDBC")
+    Rel(prometheus, actuator, "Coleta", "HTTP")
+    Rel(grafana, prometheus, "Consulta séries", "PromQL")
+
+    UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="1")
+```
+
+## 7) AC1 → legado
+
+### 7.1 Implementação: módulo Ranking (RF01)
+
+O RF01, que no Desafio 1 ainda estava apenas previsto, foi implementado como um novo módulo do
+monólito modular, na mesma convenção do módulo `ofensiva`:
+
+```text
+ranking/
+├── package-info.java
+├── api/                    RankingRestController, RankingItemDTO, RankingPaginaDTO
+├── application/            RankingService
+└── internal/persistence/   RankingRepository, LinhaDoRanking
+```
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/ranking?pagina=0&tamanho=20` | página do ranking, ordenada por moedas, depois dias consecutivos, depois nome |
+| `GET` | `/api/ranking/alunos/{aluno}` | posição de um aluno específico |
+
+Os dois endpoints aparecem no Swagger junto com os da ofensiva.
+
+### 7.2 Monólito Modular × Camadas
+
+No Desafio 1 havia uma ressalva: com um único módulo de negócio, "0 dependências entre módulos" era
+verdadeiro, mas não provava nada. Com o ranking implementado, a medição passou a ter dois módulos
+reais. Relatório em [`evidencias/dependencias-com-ranking.txt`](evidencias/dependencias-com-ranking.txt).
+
+| Base | Módulos de negócio | Dependências | Cruzando módulos | % |
+|---|---|---|---|---|
+| Modelo de referência, Camadas | 4 | 43 | 38 | 88% |
+| Modelo de referência, Modular | 4 | 30 | 7 | 23% |
+| Nossa AC1, em camadas | 1 | 8 | 8 | 100% |
+| Nosso Core, Desafio 1 | 1 | 5 | 0 | 0% |
+| **Nosso Core, com o Ranking** | **2** | **11** | **1** | **9%** |
+
+A única dependência entre módulos é `ranking.internal.persistence → ofensiva.domain`: o ranking lê
+a entidade `SequenciaDeEstudos` para montar a classificação. Ela aponta para o **domínio** do outro
+módulo, e não para o `internal` dele. No modelo de referência, quatro das sete dependências entre
+módulos alcançavam o `internal.persistence` alheio.
+
+Na versão em camadas, o mesmo ranking teria espalhado controller, service, repository e DTOs pelos
+pacotes técnicos já usados pela ofensiva. Aqui ele nasceu numa pasta própria, sem tocar em nenhum
+arquivo do módulo `ofensiva` além do índice na entidade.
+
+### 7.3 Ranking para 100.000 alunos
+
+O cenário do B1 fixa a escala em **100.000 usuários**. Com um número explícito, o desempenho do
+ranking deixa de ser projeção e passa a ser **ASR-04** (veja a matriz). Ele foi atendido dentro do
+monólito, sem extrair serviço:
+
+| Decisão | Por que importa com 100.000 alunos |
+|---|---|
+| Página limitada a **100 itens** (padrão 20) | nunca trafega nem serializa 100.000 linhas; pedido acima do limite devolve 400 |
+| Consulta por **projeção** (`LinhaDoRanking`) | lê só aluno, moedas e dias, sem montar entidades JPA |
+| Índice composto **`idx_ranking`** (moedas desc, dias desc, aluno) | o banco entrega a ordem pronta, sem ordenar a tabela inteira |
+| Posição calculada por **contagem** de quem está à frente | não percorre páginas para achar um aluno |
+| Transação **somente leitura** | o Hibernate não rastreia alterações nas linhas lidas |
+
+**Evidência** ([`RankingCargaTest`](../../src/test/java/br/edu/gamificacaocursos/ranking/RankingCargaTest.java)):
+o teste insere 100.000 alunos no H2 e verifica o comportamento.
+
+```text
+RANKING_100K pagina 0 (20 itens) em 32 ms
+RANKING_100K posicao de aluno-020823 = 168 em 214 ms
+RANKING_100K plano:
+    /* PUBLIC.IDX_RANKING */
+```
+
+| Verificação | Resultado |
+|---|---|
+| Total de alunos e de páginas | 100.000 alunos, 5.000 páginas de 20 |
+| Primeira página | 20 itens, o primeiro com a maior quantidade de moedas da base |
+| Ordenação | cada item tem moedas maiores, ou iguais com dias maiores ou iguais, que o seguinte |
+| Posição de um aluno | a posição calculada é igual à posição dele na listagem (168) |
+| Plano de execução | o banco usa `IDX_RANKING` para ordenar |
+
+Os tempos foram medidos em H2 em memória e servem como ordem de grandeza. A medida que vale para a
+arquitetura é a do PostgreSQL, coletada pelo Prometheus (item 7.5). A consulta de posição é mais
+lenta que a de página porque a contagem combina três condições; se a observabilidade mostrar que ela
+pesa, o próximo passo é materializar uma pontuação única indexada.
+
+### 7.4 100% de cobertura (JaCoCo / JUnit)
+
+```text
+Tests run: 41, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+| Classe | Instruções | Branches |
+|---|---|---|
+| `ofensiva.domain.SequenciaDeEstudos` | 100% | 100% |
+| `ofensiva.application.SequenciaDeEstudosService` | 100% | 100% |
+| `ofensiva.api.SequenciaDeEstudosRestController` | 100% | 100% |
+| `ranking.application.RankingService` | 100% | 100% |
+| `ranking.api.RankingRestController` | 100% | 100% |
+| `ranking.internal.persistence.LinhaDoRanking` | 100% | 100% |
+| `shared.web.ApiExceptionHandler` | 100% | 100% |
+| `GamificacaoCursosApplication` | 100% | 100% |
+| **Total** | **100%** | **100%** |
+
+Os 41 testes: 5 de domínio (TDD), 3 cenários Cucumber (ATDD), 8 de service com banco, 4 de service
+com Mockito, 7 de controller da ofensiva, 5 de service do ranking com Mockito, 4 de controller do
+ranking, 3 de carga com 100.000 alunos e 2 de inicialização. DTOs, `package-info` e a configuração do
+OpenAPI ficam fora do relatório por não terem regra.
+
+### 7.5 Observabilidade: Prometheus e Grafana
+
+**Por que.** As decisões dos ADRs 001 e 002 se apoiam em hipóteses de desempenho: que o ranking
+paginado e indexado aguenta 100.000 alunos dentro do monólito, e que não é preciso extraí-lo. Sem
+medição em execução essas hipóteses não podem ser confirmadas nem refutadas. A observabilidade é o
+que transforma a condição de revisão do ADR-001 ("reabrir se a leitura do ranking competir por
+recurso") em algo verificável.
+
+**O que é medido.**
+
+| Métrica | Origem | Responde a |
+|---|---|---|
+| `gamificacao_ranking_consulta_seconds` (histograma) | `RankingService` | o ranking continua rápido com 100.000 alunos? (p50, p95, p99) |
+| `gamificacao_ofensiva_estudos_total` | `SequenciaDeEstudosService` | quantos dias de estudo estão sendo registrados |
+| `gamificacao_ofensiva_moedas_total` | `SequenciaDeEstudosService` | quantas ofensivas de 7 dias foram completadas |
+| `http_server_requests_seconds` | Spring Boot | latência e volume por endpoint |
+| `jvm_memory_used_bytes` | Micrometer | memória do único processo do monólito |
+| `up` | Prometheus | a aplicação está no ar |
+
+As métricas são expostas em `/actuator/prometheus` (Spring Boot Actuator + Micrometer). O
+Prometheus coleta a cada 5 segundos e o Grafana já sobe com a fonte de dados e o dashboard
+**Gamificacao - Ofensiva e Ranking** provisionados, com 10 painéis.
+
+| Arquivo | Papel |
+|---|---|
+| [`prometheus.yml`](../../observabilidade/prometheus/prometheus.yml) | alvo de coleta `app:8080/actuator/prometheus` |
+| [`datasource.yml`](../../observabilidade/grafana/provisioning/datasources/datasource.yml) | Prometheus como fonte de dados padrão |
+| [`gamificacao.json`](../../observabilidade/grafana/dashboards/gamificacao.json) | o dashboard |
+| [`carga-100k.sql`](../../observabilidade/carga-100k.sql) | popula o PostgreSQL com 100.000 alunos |
+| [`gerar-carga.ps1`](../../observabilidade/gerar-carga.ps1) | dispara consultas ao ranking para alimentar os painéis |
+
+**Verificação local.** Com a aplicação no ar, depois de criar um aluno, registrar 7 dias e consultar
+o ranking 21 vezes:
+
+```text
+gamificacao_ofensiva_estudos_total{application="case-a-gamificacao-cursos"} 7.0
+gamificacao_ofensiva_moedas_total{application="case-a-gamificacao-cursos"} 1.0
+gamificacao_ranking_consulta_seconds_count{application="case-a-gamificacao-cursos"} 21
+```
+
+**Evidência no PostgreSQL com 100.000 alunos.** Com a pilha completa no Docker, a tabela foi
+populada com 100.000 alunos e o ranking recebeu 550 consultas a páginas aleatórias. O Hibernate
+criou os índices no PostgreSQL (`idx_ranking` e `idx_aluno`), o Prometheus marcou o alvo
+`gamificacao-api` como `UP`, e as séries coletadas mostraram:
+
+| Medida (PostgreSQL, 100.000 alunos) | Valor |
+|---|---|
+| Consultas ao ranking registradas | 551 |
+| Latência média de uma página | 45 ms |
+| Latência p95 de uma página | 85 ms |
+| Estudos registrados pela API / moedas concedidas | 21 / 3 |
+
+![Dashboard do Grafana com 100.000 alunos](../evidencias/06-grafana-dashboard.jpg)
+
+**Como reproduzir com 100.000 alunos.**
+
+```bash
+docker compose up --build -d
+docker compose exec -T postgres psql -U postgres -d gamificacao_db < observabilidade/carga-100k.sql
+powershell -File observabilidade/gerar-carga.ps1 -Requisicoes 500
+```
+
+| Endereço | O que é |
+|---|---|
+| http://localhost:3000 | Grafana (`admin` / `admin`), abre direto no dashboard |
+| http://localhost:9090 | Prometheus; em *Status → Targets* o alvo `gamificacao-api` deve estar `UP` |
+| http://localhost:8080/actuator/prometheus | métricas cruas da aplicação |
+
+### 7.6 Caso de teste com mocks (Mockito)
+
+Dois testes isolam o serviço do banco com `@Mock` e `MockitoExtension`, sem subir o Spring:
+
+**[`RankingServiceTest`](../../src/test/java/br/edu/gamificacaocursos/ranking/application/RankingServiceTest.java)**
+
+| Teste | Técnica |
+|---|---|
+| `numeraPosicoesPelaPagina` | stub de `buscarRanking` devolvendo uma página de 100.000 alunos; `verify` do `PageRequest` exato |
+| `registraOTempoDaConsulta` | `SimpleMeterRegistry` confere que cada consulta alimenta a métrica |
+| `recusaPaginaGrandeDemais` | `verifyNoInteractions`: pedido inválido não chega ao banco |
+| `calculaPosicaoDoAluno` | stubs de `buscarPorAluno` e `contarAFrente`; posição = à frente + 1 |
+| `alunoInexistenteNaoContaPosicao` | `never()`: sem aluno, a contagem não é disparada |
+
+**[`SequenciaDeEstudosServiceMockitoTest`](../../src/test/java/br/edu/gamificacaocursos/ofensiva/application/SequenciaDeEstudosServiceMockitoTest.java)**
+
+| Teste | Técnica |
+|---|---|
+| `buscaAntesDeSalvar` | `InOrder`: `findById` antes de `save` |
+| `naoSalvaSequenciaInexistente` | `never()` em `save` e contador de estudos zerado |
+| `naoCriaAlunoDuplicado` | stub de `existsByAluno` e `never()` em `save` |
+| `alimentaAsMetricasDeNegocio` | 7 dias seguidos geram 7 estudos e 1 moeda nas métricas |
+
+### ADR-002 — Ranking paginado, projetado e indexado dentro do monólito
+
+**Status:** Aceito · **Entrega:** AC2
+
+**Contexto.** O ranking precisa atender 100.000 alunos. O ADR-001 o deixou como candidato à
+extração, condicionada a medição.
+
+**Alternativas.** (A) consulta simples com `findAll` e ordenação em memória; (B) consulta paginada,
+projetada e apoiada em índice, dentro do módulo; (C) serviço de ranking separado, com base própria.
+
+**Decisão.** (B). Resolve o volume sem custo de distribuição e mantém o ranking como módulo com
+fronteira própria, preservando a extração futura.
+
+**Consequências.** A leitura de uma página não depende do total de alunos. Em troca, o índice
+aumenta o custo de escrita em cada registro de estudo, e o ranking continua dividindo processo e
+banco com a ofensiva. A extração volta à mesa se o p95 do ranking no Grafana subir de forma
+sustentada sob carga.
+
+### ADR-003 — Observabilidade com Prometheus e Grafana
+
+**Status:** Aceito · **Entrega:** AC2
+
+**Contexto.** ADR-001 e ADR-002 dependem de hipóteses de desempenho que precisam ser verificadas em
+execução.
+
+**Alternativas.** (A) logs da aplicação; (B) métricas expostas pelo Actuator e coletadas pelo
+Prometheus, com painéis no Grafana.
+
+**Decisão.** (B). Métricas numéricas permitem acompanhar percentis de latência ao longo do tempo,
+o que logs não oferecem sem processamento adicional.
+
+**Consequências.** Dois containers a mais para operar, e cada métrica de negócio nova precisa ser
+instrumentada no código. Em troca, a condição de revisão do ADR-001 passa a ter um painel que a
+responde.

@@ -1,0 +1,19 @@
+DEPOIS DO RANKING - dois modulos de negocio
+===========================================
+
+Pacotes de primeiro nivel: 4
+Pacotes no total: 13
+
+Dependencias entre pacotes (origem -> destino: nro de imports):
+  ofensiva.api                 -> ofensiva.application         1
+  ofensiva.application         -> ofensiva.api                 1
+  ofensiva.application         -> ofensiva.domain              1
+  ofensiva.application         -> ofensiva.internal.persistence 1
+  ofensiva.internal.persistence -> ofensiva.domain              1
+  ranking.api                  -> ranking.application          1
+  ranking.application          -> ranking.api                  2
+  ranking.application          -> ranking.internal.persistence 2
+  ranking.internal.persistence -> ofensiva.domain              1
+
+Total de dependencias entre pacotes: 11
+Dependencias que cruzam o primeiro nivel: 1

@@ -10,7 +10,7 @@ class GamificacaoCursosApplicationTest {
     @Test
     @DisplayName("BLUE: o contexto do Spring Boot sobe sem erro")
     void aplicacaoInicializaSemErro() {
-        assertDoesNotThrow(() -> GamificacaoCursosApplication.main(new String[]{}));
+        assertDoesNotThrow(() -> GamificacaoCursosApplication.main(new String[]{"--server.port=8081"}));
     }
 
     @Test
