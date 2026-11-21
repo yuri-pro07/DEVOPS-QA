@@ -682,3 +682,252 @@ o que logs não oferecem sem processamento adicional.
 **Consequências.** Dois containers a mais para operar, e cada métrica de negócio nova precisa ser
 instrumentada no código. Em troca, a condição de revisão do ADR-001 passa a ter um painel que a
 responde.
+
+
+---
+
+# ENTREGA AF: plataforma de formação com ML, RAG e agentes de IA
+
+A AF parte do **Estudo de Caso 1** (prova de 01/12/2026): uma empresa de educação corporativa quer
+uma plataforma em que colaboradores façam avaliações de competências, recebam recomendações de
+cursos e acompanhem a própria evolução. O caso pede Spring Boot para o negócio, Python para Machine
+Learning, RabbitMQ para mensageria, REST entre aplicações, RAG sobre documentos institucionais e
+agentes de IA.
+
+A entrega estende a aplicação da AC1/AC2 com requisitos que ainda não existiam, usando Spring Boot,
+Spring AI e FastAPI, com front-end e back-end no Docker. Toda a aplicação sobe com um único comando:
+
+```bash
+docker compose up --build
+```
+
+## Divisão dos requisitos
+
+Cada integrante implementa dois requisitos, em commits separados:
+
+| Integrante | Requisitos | Tecnologia principal | Commit |
+|---|---|---|---|
+| **Pedro Ricci Gomes Nascimento** | **RF01** cadastro e consulta de colaboradores e cursos · **RF02** classificação do nível de competência por ML | Spring Boot · FastAPI + scikit-learn · REST síncrono | 1º |
+| **Yuri Peruzzo** | **RF03** recomendação de cursos por RAG · **RF04** agentes de IA com autorização do usuário | Spring AI · FastAPI (busca documental) | 2º |
+| **Enzo Zorzetto** | **RF05** acompanhamento dos treinamentos de modelos · **RNF02** aceitar treinamentos com o ML indisponível | RabbitMQ · worker Python | 3º |
+
+Os demais requisitos não funcionais (RNF01, RNF03, RNF04 e RNF05) entram como direcionadores da
+arquitetura (ASRs) e aparecem nas decisões e na documentação C4.
+
+## ADR-004: Monólito modular híbrido (Alternativa A)
+
+**Status:** Aceito · **Entrega:** AF
+
+**Contexto.** A equipe é reduzida e precisa de baixo custo de operação (RNF05), mas os componentes de
+IA devem evoluir sem comprometer cadastro e consulta (RNF04). O ML é feito em Python, e o núcleo de
+negócio já é um monólito modular em Spring Boot (ADR-001).
+
+**Decisão.** Adotar a Alternativa A em versão híbrida. O núcleo de negócio continua sendo um único
+deploy Spring Boot, organizado em módulos verticais (`colaborador`, `curso`, `competencia`, além de
+`ofensiva` e `ranking` herdados da AC1/AC2). As capacidades de IA ficam em serviços Python separados
+(FastAPI), que o núcleo acessa por portas, isto é, interfaces do módulo com adaptadores na camada
+`internal`.
+
+**Justificativa.**
+- **Modularidade e acoplamento:** o módulo `competencia` conhece só a interface
+  `ClassificadorDeCompetencia`. O adaptador HTTP fica em `internal/ml` e pode ser trocado sem tocar
+  na regra de negócio.
+- **Escalabilidade:** o serviço de ML escala sozinho (workers do uvicorn ou réplicas), sem replicar o
+  núcleo Java.
+- **Manutenção:** o modelo pode ser retreinado e publicado sem novo deploy do Spring Boot.
+- **Complexidade operacional:** um backend Java e serviços Python pequenos, em vez de um conjunto de
+  microsserviços com gateway, descoberta e bases separadas.
+
+**Consequência (trade-off).** A classificação depende de uma chamada síncrona a outro processo. Isso
+exige timeout, tratamento de falha (HTTP 503) e monitoramento da latência. O núcleo continua
+escalando como um bloco único.
+
+## Parte do Pedro: RF01 e RF02
+
+### Estrutura
+
+```text
+src/main/java/br/edu/gamificacaocursos/
+├── colaborador/                       RF01
+│   ├── api/                           ColaboradorRestController, DTOs
+│   ├── application/                   ColaboradorService
+│   ├── domain/                        Colaborador
+│   └── internal/persistence/          ColaboradorRepository
+├── curso/                             RF01
+│   ├── api/                           CursoRestController, DTOs
+│   ├── application/                   CursoService
+│   ├── domain/                        Curso
+│   └── internal/persistence/          CursoRepository, CatalogoInicial
+├── competencia/                       RF02
+│   ├── api/                           CompetenciaRestController, DTOs
+│   ├── application/                   CompetenciaService, ClassificadorDeCompetencia (porta)
+│   ├── domain/                        AvaliacaoDeCompetencia, PerfilDeCompetencia, Classificacao
+│   └── internal/
+│       ├── ml/                        FastApiClassificadorAdapter, ClienteDoMlConfig
+│       └── persistence/               AvaliacaoDeCompetenciaRepository
+└── shared/
+    ├── domain/                        NivelDeCompetencia
+    └── web/                           ApiExceptionHandler, ServicoExternoIndisponivelException
+ml/                                    serviço FastAPI de Machine Learning
+├── app.py                             /health, /modelo e /predict
+├── treinamento.py                     dados sintéticos, treino e métricas
+├── preparar_modelo.py                 treina antes de subir os workers
+├── tests/test_app.py                  testes com pytest
+└── Dockerfile                         estágio "teste" e imagem final
+```
+
+### RF01: cadastro e consulta de colaboradores e cursos
+
+| Método | Endpoint | O que faz |
+|---|---|---|
+| POST | `/api/colaboradores` | Cadastra colaborador (nome, email, cargo, área) |
+| GET | `/api/colaboradores` | Lista os colaboradores |
+| GET | `/api/colaboradores/{id}` | Consulta um colaborador |
+| POST | `/api/cursos` | Cadastra curso (título, descrição, área, nível, carga horária) |
+| GET | `/api/cursos?nivel=&area=` | Lista o catálogo, com filtro opcional por nível e área |
+| GET | `/api/cursos/{id}` | Consulta um curso |
+
+Regras:
+- O email é gravado em minúsculas e não pode se repetir. O título do curso também é único, sem
+  diferenciar maiúsculas de minúsculas.
+- Campos obrigatórios e limites são validados com Bean Validation, e cada erro volta com HTTP 400
+  indicando o campo.
+- O filtro por área ignora maiúsculas e minúsculas.
+- Na primeira subida, com o banco vazio, o `CatalogoInicial` carrega nove cursos (três por nível).
+  Assim o catálogo já tem conteúdo para as recomendações dos próximos requisitos.
+
+### RF02: classificação do nível de competência por ML
+
+Fluxo de uma avaliação:
+
+```mermaid
+sequenceDiagram
+    participant F as Front-end Vue
+    participant C as CompetenciaRestController
+    participant S as CompetenciaService
+    participant A as FastApiClassificadorAdapter
+    participant M as Serviço ML (FastAPI)
+    participant B as PostgreSQL
+    F->>C: POST /api/colaboradores/{id}/competencias
+    C->>S: avaliar(id, perfil)
+    S->>B: confere se o colaborador existe
+    S->>A: classificar(perfil)
+    A->>M: POST /predict (REST, timeout de 2 s)
+    M-->>A: nível, probabilidades e versão do modelo
+    S->>B: grava a AvaliacaoDeCompetencia
+    C-->>F: 201 com nível, confiança e probabilidades
+```
+
+| Método | Endpoint | O que faz |
+|---|---|---|
+| POST | `/api/colaboradores/{id}/competencias` | Classifica o perfil no ML e grava a avaliação |
+| GET | `/api/colaboradores/{id}/competencias` | Histórico do colaborador, da mais recente à mais antiga |
+| GET | `localhost:8001/modelo` | Métricas e versão do modelo em uso |
+| GET | `localhost:8001/docs` | Documentação interativa do serviço de ML |
+
+**O modelo.** O modelo é uma regressão logística (scikit-learn) com seis características: meses de
+experiência, cursos concluídos, média das avaliações, horas semanais de estudo, conhecimento de REST e
+conhecimento de banco de dados. Os dados são **sintéticos** e gerados com semente fixa (42). Uma
+regra de pontuação com ruído define os rótulos INICIANTE, INTERMEDIARIO e AVANCADO. A divisão é
+estratificada, com 2.400 amostras de treino e 600 de teste. O modelo em uso registra **acurácia de
+0,923** e **F1 macro de 0,925**.
+
+O modelo fica salvo no volume `ml_models`, então reiniciar o container não retreina. Se a regra de
+rotulagem mudar, o metadado `regra` deixa de bater e o modelo é retreinado na subida seguinte.
+
+**Por que REST síncrono.** O colaborador espera o nível na mesma tela, e a inferência é curta (dezenas
+de milissegundos). Uma fila só faria sentido para tarefas longas, como o treinamento (RF05 e RNF02).
+
+**Falhas.** O cliente HTTP usa timeout de 2 s, igual ao limite do RNF01. Erro, timeout ou resposta
+vazia do ML viram `ServicoExternoIndisponivelException`, que o `ApiExceptionHandler` devolve como
+**HTTP 503**, sem gravar nada. Cadastro e consulta continuam funcionando com o ML desligado (RNF04):
+
+| Cenário, com a stack no Docker | Resultado |
+|---|---|
+| `docker stop gamificacao-ml` e POST de avaliação | `503 {"erro":"Servico de ML indisponivel no momento"}` |
+| Com o ML parado, POST `/api/colaboradores` e GET `/api/cursos` | `201` e `200` |
+| `docker start gamificacao-ml` | Avaliações voltam a responder 201, sem reiniciar o Spring Boot |
+
+**Desempenho e observabilidade.** O timer `gamificacao.competencia.classificacao` mede o tempo da
+chamada ao ML e publica no Prometheus um histograma com faixa de 2 s
+(`gamificacao_competencia_classificacao_seconds_bucket{le="2.0"}`). Uma avaliação isolada levou de
+33 ms a 200 ms. Num teste de estresse com **300 usuários simultâneos** sem pausa entre requisições
+(3.000 avaliações, gerador de carga, banco, Java e ML na mesma máquina):
+
+| Configuração | Vazão | p95 medido no cliente | Chamadas ao ML até 2 s |
+|---|---|---|---|
+| ML com 1 processo e cliente HTTP sem pool | 145 req/s | 3,3 s | não medido |
+| ML com 4 workers, `HttpClient` do JDK com pool e sem log de SQL | 217 req/s | 2,2 s | 100% (máximo de 0,52 s) |
+
+O próprio ML deixou de ser o gargalo: a chamada mais lenta levou 0,52 s. Nesse cenário de estresse
+o p95 de ponta a ponta ainda fica um pouco acima de 2 s, porque cada usuário dispara a próxima
+requisição no mesmo instante em que recebe a resposta e as 8 CPUs do notebook são divididas entre o
+gerador de carga e todos os containers.
+
+O RNF01 descreve 300 usuários usando o sistema, e um usuário real espera o resultado antes de pedir
+outra classificação. Por isso o teste foi repetido com **300 usuários simultâneos e pausa de 1 s**
+entre as avaliações de cada um, com a aplicação já aquecida:
+
+| Rodada | Avaliações | Vazão | Média | p95 | Até 2 s |
+|---|---|---|---|---|---|
+| 1 | 3.000 | 214 req/s | 229 ms | 433 ms | 100% |
+| 2 | 3.000 | 229 req/s | 158 ms | 591 ms | 100% |
+| 3 | 6.000 | 257 req/s | 103 ms | 283 ms | 100% |
+
+Nas três rodadas o p95 ficou bem abaixo de 2 s, com todas as 12.000 avaliações respondidas com 201.
+A primeira execução logo após a aplicação ficar horas parada, ainda fria, teve p95 de 2,5 s (90% até
+2 s); a partir da segunda o resultado se manteve. Os números valem para este notebook e não
+substituem um teste em ambiente de produção.
+
+### Testes
+
+| Camada | Classe de teste | Testes | Técnica |
+|---|---|---|---|
+| Serviço | `ColaboradorServiceTest` | 4 | Mockito, `ArgumentCaptor` |
+| Serviço | `CursoServiceTest` | 4 | Mockito |
+| Serviço | `CompetenciaServiceTest` | 4 | Mockito, `InOrder`, `verifyNoInteractions`, `SimpleMeterRegistry` |
+| Carga inicial | `CatalogoInicialTest` | 2 | Mockito, `argThat` |
+| Integração HTTP com o ML | `FastApiClassificadorAdapterTest` | 4 | `MockRestServiceServer` (sucesso, 500, timeout, corpo vazio) |
+| API | `ColaboradorRestControllerTest` | 4 | `@SpringBootTest` + MockMvc + H2 |
+| API | `CursoRestControllerTest` | 4 | `@SpringBootTest` + MockMvc + H2 |
+| API | `CompetenciaRestControllerTest` | 4 | MockMvc + `@MockitoBean` no classificador + `/actuator/prometheus` |
+| Serviço de ML (Python) | `ml/tests/test_app.py` | 7 | pytest + `TestClient` do FastAPI |
+
+Resultado do `mvn clean install`: **71 testes** (41 da AC1/AC2 + 30 novos), **0 falhas** e **JaCoCo
+com 100%** de instruções, desvios, linhas e métodos. Os testes Python rodam no estágio `teste` da
+imagem do ML:
+
+```bash
+docker build --target teste ml
+```
+
+Saída: `7 passed`.
+
+### Como testar
+
+Depois do `docker compose up --build`:
+
+| Serviço | Endereço |
+|---|---|
+| Front-end (abas Colaboradores, Cursos e Competência) | http://localhost:8080 |
+| Swagger | http://localhost:8080/swagger-ui.html |
+| Serviço de ML | http://localhost:8001/docs |
+| Prometheus | http://localhost:9090 |
+| Grafana (admin/admin) | http://localhost:3000 |
+
+Exemplo pela linha de comando:
+
+```bash
+curl -X POST localhost:8080/api/colaboradores -H "Content-Type: application/json" -d "{\"nome\":\"Mariana Lopes\",\"email\":\"mariana.lopes@empresa.com\",\"cargo\":\"Desenvolvedora\",\"area\":\"TI\"}"
+curl -X POST localhost:8080/api/colaboradores/1/competencias -H "Content-Type: application/json" -d "{\"mesesExperiencia\":30,\"cursosConcluidos\":10,\"mediaAvaliacoes\":7.5,\"horasSemanais\":12,\"conheceRest\":true,\"conheceBancoDeDados\":false}"
+```
+
+### Evidências
+
+Catálogo carregado e filtros (RF01):
+
+![Catálogo de cursos](../evidencias/07-af-cursos.jpg)
+
+Classificação de competência pelo ML (RF02):
+
+![Classificação por ML](../evidencias/08-af-competencia-ml.jpg)
