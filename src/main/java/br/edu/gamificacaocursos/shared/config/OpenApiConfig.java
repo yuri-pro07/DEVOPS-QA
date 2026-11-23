@@ -14,7 +14,9 @@ public class OpenApiConfig {
                 .title("Case A - Gamificacao para Engajamento de Educacao Continuada")
                 .version("1.0")
                 .description("API da US1: ofensiva de dias consecutivos de estudo, "
-                        + "com recompensa automatica ao completar 7 dias seguidos.")
+                        + "com recompensa automatica ao completar 7 dias seguidos. "
+                        + "Extensao da AF: cadastro de colaboradores e cursos e classificacao "
+                        + "do nivel de competencia por Machine Learning.")
                 .contact(new Contact().name("Yuri Peruzzo, Enzo Zorzetto, Pedro Ricci Gomes Nascimento")));
     }
 }

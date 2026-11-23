@@ -3,21 +3,37 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Case A - Ofensiva de Estudos</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <title>Plataforma de Formacao - Gamificacao e IA</title>
+    <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f6f8; padding: 24px; color: #222; }
-        .box { max-width: 960px; margin: auto; background: #fff; padding: 24px; border-radius: 10px; }
+        .box { max-width: 1040px; margin: auto; background: #fff; padding: 24px; border-radius: 10px; }
         h1 { margin-top: 0; }
+        .abas { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid #e3e6ea; padding-bottom: 12px; }
+        .abas button { width: auto; margin: 0; background: #e8edf5; color: #234; }
+        .abas button.ativa { background: #2d6cdf; color: #fff; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
-        input, button { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
+        .campos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; }
+        @media (max-width: 720px) { .grid, .campos { grid-template-columns: 1fr; } }
+        input, select, textarea, button { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; font: inherit; }
+        label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; }
+        label.marca { display: flex; gap: 8px; align-items: center; }
+        label.marca input { width: auto; margin: 0; }
         button { background: #2d6cdf; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
         button.secundario { background: #667; }
         button.perigo { background: #c0392b; width: auto; padding: 4px 10px; margin: 0; }
+        button.linha { width: auto; margin: 0; padding: 4px 10px; }
+        button:disabled { opacity: .6; cursor: wait; }
         table { width: 100%; border-collapse: collapse; margin-top: 8px; }
         th, td { border-bottom: 1px solid #e3e6ea; padding: 8px; text-align: left; font-size: 14px; }
         .moeda { font-weight: bold; color: #b8860b; }
+        .nivel { font-weight: bold; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        .INICIANTE { background: #e6f4ea; color: #1e6b33; }
+        .INTERMEDIARIO { background: #fff4e0; color: #8a5a00; }
+        .AVANCADO { background: #e8eefc; color: #1f4bb8; }
+        .resultado { border: 1px solid #e3e6ea; border-radius: 8px; padding: 12px; margin-top: 8px; }
+        .barra { height: 8px; background: #e3e6ea; border-radius: 4px; overflow: hidden; margin: 2px 0 8px; }
+        .barra div { height: 100%; background: #2d6cdf; }
         .msg { padding: 10px; border-radius: 6px; margin-top: 12px; }
         .msg.ok { background: #e6f4ea; color: #1e6b33; }
         .msg.erro { background: #fdecea; color: #a4232a; }
@@ -26,46 +42,149 @@
 </head>
 <body>
 <div id="app" class="box">
-    <h1>Ofensiva de Estudos</h1>
-    <p>Case A &mdash; Gamifica&ccedil;&atilde;o para Engajamento de Educa&ccedil;&atilde;o Continuada.
-        O aluno mant&eacute;m dias consecutivos de estudo e ganha 1 moeda ao completar 7 dias seguidos.</p>
+    <h1>Plataforma de Forma&ccedil;&atilde;o</h1>
+    <p>Gamifica&ccedil;&atilde;o da AC1/AC2 e a extens&atilde;o da AF: cadastro de colaboradores e cursos e
+        classifica&ccedil;&atilde;o do n&iacute;vel de compet&ecirc;ncia por Machine Learning.</p>
 
-    <div class="grid">
-        <div>
-            <h2>Nova sequ&ecirc;ncia</h2>
-            <input v-model="novoAluno" placeholder="Nome do aluno" @keyup.enter="criar">
-            <button @click="criar">Criar sequ&ecirc;ncia</button>
-        </div>
-        <div>
-            <h2>Registrar estudo</h2>
-            <input v-model="registro.id" type="number" placeholder="Id da sequ&ecirc;ncia">
-            <input v-model="registro.data" type="date">
-            <button @click="registrarEstudo">Registrar dia de estudo</button>
-        </div>
+    <div class="abas">
+        <button v-for="a in abas" :key="a.id" :class="{ ativa: aba === a.id }" @click="trocarAba(a.id)">{{ a.nome }}</button>
     </div>
 
-    <h2>Sequ&ecirc;ncias</h2>
-    <button class="secundario" @click="listar">Atualizar lista</button>
+    <section v-if="aba === 'ofensiva'">
+        <div class="grid">
+            <div>
+                <h2>Nova sequ&ecirc;ncia</h2>
+                <input v-model="novoAluno" placeholder="Nome do aluno" @keyup.enter="criar">
+                <button @click="criar">Criar sequ&ecirc;ncia</button>
+            </div>
+            <div>
+                <h2>Registrar estudo</h2>
+                <input v-model="registro.id" type="number" placeholder="Id da sequ&ecirc;ncia">
+                <input v-model="registro.data" type="date">
+                <button @click="registrarEstudo">Registrar dia de estudo</button>
+            </div>
+        </div>
 
-    <p v-if="sequencias.length === 0" class="vazio">Nenhuma sequ&ecirc;ncia cadastrada ainda.</p>
-    <table v-else>
-        <thead>
-        <tr>
-            <th>Id</th><th>Aluno</th><th>Dias consecutivos</th>
-            <th>&Uacute;ltimo dia</th><th>Moedas</th><th></th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr v-for="s in sequencias" :key="s.id">
-            <td>{{ s.id }}</td>
-            <td>{{ s.aluno }}</td>
-            <td>{{ s.diasConsecutivos }}</td>
-            <td>{{ s.ultimoDiaEstudado || '-' }}</td>
-            <td class="moeda">{{ s.moedasConquistadas }}</td>
-            <td><button class="perigo" @click="remover(s.id)">Remover</button></td>
-        </tr>
-        </tbody>
-    </table>
+        <h2>Sequ&ecirc;ncias</h2>
+        <button class="secundario" @click="listar">Atualizar lista</button>
+
+        <p v-if="sequencias.length === 0" class="vazio">Nenhuma sequ&ecirc;ncia cadastrada ainda.</p>
+        <table v-else>
+            <thead>
+            <tr>
+                <th>Id</th><th>Aluno</th><th>Dias consecutivos</th>
+                <th>&Uacute;ltimo dia</th><th>Moedas</th><th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="s in sequencias" :key="s.id">
+                <td>{{ s.id }}</td>
+                <td>{{ s.aluno }}</td>
+                <td>{{ s.diasConsecutivos }}</td>
+                <td>{{ s.ultimoDiaEstudado || '-' }}</td>
+                <td class="moeda">{{ s.moedasConquistadas }}</td>
+                <td><button class="perigo" @click="remover(s.id)">Remover</button></td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section v-if="aba === 'colaboradores'">
+        <h2>Cadastrar colaborador</h2>
+        <div class="campos">
+            <div><label>Nome</label><input v-model="colaborador.nome"></div>
+            <div><label>Email</label><input v-model="colaborador.email" type="email"></div>
+            <div><label>Cargo</label><input v-model="colaborador.cargo"></div>
+            <div><label>&Aacute;rea</label><input v-model="colaborador.area"></div>
+        </div>
+        <button @click="cadastrarColaborador">Cadastrar colaborador</button>
+
+        <h2>Colaboradores</h2>
+        <p v-if="colaboradores.length === 0" class="vazio">Nenhum colaborador cadastrado ainda.</p>
+        <table v-else>
+            <thead><tr><th>Id</th><th>Nome</th><th>Email</th><th>Cargo</th><th>&Aacute;rea</th><th></th></tr></thead>
+            <tbody>
+            <tr v-for="c in colaboradores" :key="c.id">
+                <td>{{ c.id }}</td><td>{{ c.nome }}</td><td>{{ c.email }}</td><td>{{ c.cargo }}</td><td>{{ c.area }}</td>
+                <td><button class="secundario linha" @click="irParaAvaliacao(c.id)">Avaliar</button></td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section v-if="aba === 'cursos'">
+        <h2>Cadastrar curso</h2>
+        <div class="campos">
+            <div><label>T&iacute;tulo</label><input v-model="curso.titulo"></div>
+            <div><label>&Aacute;rea</label><input v-model="curso.area"></div>
+            <div><label>N&iacute;vel</label>
+                <select v-model="curso.nivel"><option v-for="n in niveis" :key="n">{{ n }}</option></select></div>
+            <div><label>Carga hor&aacute;ria</label><input v-model.number="curso.cargaHoraria" type="number" min="1"></div>
+        </div>
+        <label>Descri&ccedil;&atilde;o</label>
+        <textarea v-model="curso.descricao" rows="2"></textarea>
+        <button @click="cadastrarCurso">Cadastrar curso</button>
+
+        <h2>Cat&aacute;logo</h2>
+        <div class="campos">
+            <div><label>Filtrar por n&iacute;vel</label>
+                <select v-model="filtro.nivel" @change="listarCursos">
+                    <option value="">Todos</option><option v-for="n in niveis" :key="n">{{ n }}</option>
+                </select></div>
+            <div><label>Filtrar por &aacute;rea</label><input v-model="filtro.area" @keyup.enter="listarCursos" placeholder="Ex.: Dados"></div>
+            <div><label>&nbsp;</label><button class="secundario" @click="listarCursos">Filtrar</button></div>
+        </div>
+        <table>
+            <thead><tr><th>Id</th><th>T&iacute;tulo</th><th>&Aacute;rea</th><th>N&iacute;vel</th><th>Horas</th></tr></thead>
+            <tbody>
+            <tr v-for="c in cursos" :key="c.id" :title="c.descricao">
+                <td>{{ c.id }}</td><td>{{ c.titulo }}</td><td>{{ c.area }}</td>
+                <td><span :class="['nivel', c.nivel]">{{ c.nivel }}</span></td><td>{{ c.cargaHoraria }}</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section v-if="aba === 'competencia'">
+        <h2>Avalia&ccedil;&atilde;o de compet&ecirc;ncia (ML)</h2>
+        <p>O Spring Boot envia o perfil ao servi&ccedil;o FastAPI por REST e grava o n&iacute;vel devolvido pelo modelo.</p>
+        <label>Colaborador</label>
+        <select v-model="avaliacao.colaboradorId" @change="carregarHistorico">
+            <option value="">Selecione</option>
+            <option v-for="c in colaboradores" :key="c.id" :value="c.id">{{ c.id }} - {{ c.nome }}</option>
+        </select>
+        <div class="campos">
+            <div><label>Meses de experi&ecirc;ncia</label><input v-model.number="avaliacao.mesesExperiencia" type="number" min="0"></div>
+            <div><label>Cursos conclu&iacute;dos</label><input v-model.number="avaliacao.cursosConcluidos" type="number" min="0"></div>
+            <div><label>M&eacute;dia das avalia&ccedil;&otilde;es (0 a 10)</label><input v-model.number="avaliacao.mediaAvaliacoes" type="number" step="0.1" min="0" max="10"></div>
+            <div><label>Horas semanais de estudo</label><input v-model.number="avaliacao.horasSemanais" type="number" min="0"></div>
+            <div><label class="marca"><input v-model="avaliacao.conheceRest" type="checkbox"> Conhece REST</label></div>
+            <div><label class="marca"><input v-model="avaliacao.conheceBancoDeDados" type="checkbox"> Conhece banco de dados</label></div>
+        </div>
+        <button :disabled="classificando" @click="avaliar">{{ classificando ? 'Classificando...' : 'Classificar com ML' }}</button>
+
+        <div v-if="resultado" class="resultado">
+            <p>N&iacute;vel: <span :class="['nivel', resultado.nivel]">{{ resultado.nivel }}</span>
+                &middot; confian&ccedil;a {{ (resultado.confianca * 100).toFixed(1) }}% &middot; {{ resultado.modelo }}</p>
+            <div v-for="(p, n) in resultado.probabilidades" :key="n">
+                <small>{{ n }}: {{ (p * 100).toFixed(1) }}%</small>
+                <div class="barra"><div :style="{ width: (p * 100) + '%' }"></div></div>
+            </div>
+        </div>
+
+        <h2>Hist&oacute;rico do colaborador</h2>
+        <p v-if="historico.length === 0" class="vazio">Sem avalia&ccedil;&otilde;es para o colaborador selecionado.</p>
+        <table v-else>
+            <thead><tr><th>Quando</th><th>N&iacute;vel</th><th>Confian&ccedil;a</th><th>Modelo</th></tr></thead>
+            <tbody>
+            <tr v-for="h in historico" :key="h.id">
+                <td>{{ h.avaliadoEm.replace('T', ' ').slice(0, 19) }}</td>
+                <td><span :class="['nivel', h.nivel]">{{ h.nivel }}</span></td>
+                <td>{{ (h.confianca * 100).toFixed(1) }}%</td><td>{{ h.modelo }}</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
 
     <div v-if="mensagem" :class="['msg', erro ? 'erro' : 'ok']">{{ mensagem }}</div>
 </div>
@@ -79,9 +198,27 @@ createApp({
             apiBase: '',
             mensagem: '',
             erro: false,
+            aba: 'colaboradores',
+            abas: [
+                { id: 'colaboradores', nome: 'Colaboradores' },
+                { id: 'cursos', nome: 'Cursos' },
+                { id: 'competencia', nome: 'Competência (ML)' },
+                { id: 'ofensiva', nome: 'Ofensiva de estudos' }
+            ],
+            niveis: ['INICIANTE', 'INTERMEDIARIO', 'AVANCADO'],
             sequencias: [],
             novoAluno: '',
-            registro: { id: '', data: new Date().toISOString().slice(0, 10) }
+            registro: { id: '', data: new Date().toISOString().slice(0, 10) },
+            colaboradores: [],
+            colaborador: { nome: '', email: '', cargo: '', area: '' },
+            cursos: [],
+            curso: { titulo: '', descricao: '', area: '', nivel: 'INICIANTE', cargaHoraria: 8 },
+            filtro: { nivel: '', area: '' },
+            avaliacao: { colaboradorId: '', mesesExperiencia: 30, cursosConcluidos: 10, mediaAvaliacoes: 7.5,
+                horasSemanais: 12, conheceRest: true, conheceBancoDeDados: false },
+            resultado: null,
+            historico: [],
+            classificando: false
         };
     },
     methods: {
@@ -93,7 +230,10 @@ createApp({
             const texto = await resposta.text();
             if (!resposta.ok) {
                 let detalhe = texto;
-                try { detalhe = JSON.parse(texto).erro || texto; } catch (e) { }
+                try {
+                    const corpo = JSON.parse(texto);
+                    detalhe = corpo.erro || Object.values(corpo.erros || {}).join(' | ') || texto;
+                } catch (e) { }
                 throw new Error(detalhe || 'Erro na requisicao');
             }
             return texto ? JSON.parse(texto) : null;
@@ -101,6 +241,13 @@ createApp({
         aviso(texto, ehErro = false) {
             this.mensagem = texto;
             this.erro = ehErro;
+        },
+        trocarAba(id) {
+            this.aba = id;
+            this.mensagem = '';
+            if (id === 'ofensiva') this.listar();
+            if (id === 'cursos') this.listarCursos();
+            if (id === 'colaboradores' || id === 'competencia') this.listarColaboradores();
         },
         async listar() {
             try {
@@ -145,10 +292,86 @@ createApp({
             } catch (e) {
                 this.aviso(e.message, true);
             }
+        },
+        async listarColaboradores() {
+            try {
+                this.colaboradores = await this.request('/api/colaboradores');
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        async cadastrarColaborador() {
+            try {
+                const c = await this.request('/api/colaboradores', {
+                    method: 'POST',
+                    body: JSON.stringify(this.colaborador)
+                });
+                this.aviso('Colaborador ' + c.nome + ' cadastrado com id ' + c.id);
+                this.colaborador = { nome: '', email: '', cargo: '', area: '' };
+                await this.listarColaboradores();
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        async listarCursos() {
+            const params = new URLSearchParams();
+            if (this.filtro.nivel) params.set('nivel', this.filtro.nivel);
+            if (this.filtro.area.trim()) params.set('area', this.filtro.area.trim());
+            try {
+                this.cursos = await this.request('/api/cursos' + (params.toString() ? '?' + params : ''));
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        async cadastrarCurso() {
+            try {
+                const c = await this.request('/api/cursos', {
+                    method: 'POST',
+                    body: JSON.stringify(this.curso)
+                });
+                this.aviso('Curso ' + c.titulo + ' cadastrado com id ' + c.id);
+                this.curso = { titulo: '', descricao: '', area: '', nivel: 'INICIANTE', cargaHoraria: 8 };
+                await this.listarCursos();
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        irParaAvaliacao(id) {
+            this.trocarAba('competencia');
+            this.avaliacao.colaboradorId = id;
+            this.resultado = null;
+            this.carregarHistorico();
+        },
+        async carregarHistorico() {
+            this.historico = [];
+            if (!this.avaliacao.colaboradorId) return;
+            try {
+                this.historico = await this.request('/api/colaboradores/' + this.avaliacao.colaboradorId + '/competencias');
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        async avaliar() {
+            if (!this.avaliacao.colaboradorId) return this.aviso('Selecione um colaborador', true);
+            const { colaboradorId, ...perfil } = this.avaliacao;
+            this.classificando = true;
+            try {
+                this.resultado = await this.request('/api/colaboradores/' + colaboradorId + '/competencias', {
+                    method: 'POST',
+                    body: JSON.stringify(perfil)
+                });
+                this.aviso('Colaborador classificado como ' + this.resultado.nivel);
+                await this.carregarHistorico();
+            } catch (e) {
+                this.resultado = null;
+                this.aviso(e.message, true);
+            } finally {
+                this.classificando = false;
+            }
         }
     },
     mounted() {
-        this.listar();
+        this.listarColaboradores();
     }
 }).mount('#app');
 </script>

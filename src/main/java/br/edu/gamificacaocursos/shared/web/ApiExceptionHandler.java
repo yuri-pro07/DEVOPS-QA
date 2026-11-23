@@ -34,4 +34,13 @@ public class ApiExceptionHandler {
         body.put("erros", campos);
         return ResponseEntity.badRequest().body(body);
     }
+
+    @ExceptionHandler(ServicoExternoIndisponivelException.class)
+    public ResponseEntity<Map<String, Object>> handleServicoIndisponivel(ServicoExternoIndisponivelException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", LocalDateTime.now());
+        body.put("status", HttpStatus.SERVICE_UNAVAILABLE.value());
+        body.put("erro", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
+    }
 }
