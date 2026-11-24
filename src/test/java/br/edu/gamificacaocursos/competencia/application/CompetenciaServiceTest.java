@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static br.edu.gamificacaocursos.shared.domain.NivelDeCompetencia.AVANCADO;
 import static br.edu.gamificacaocursos.shared.domain.NivelDeCompetencia.INTERMEDIARIO;
@@ -113,5 +114,19 @@ class CompetenciaServiceTest {
         assertEquals(0.0, historico.get(0).probabilidades().get("INICIANTE"));
         assertEquals(LocalDateTime.of(2026, 11, 1, 10, 0), historico.get(1).avaliadoEm());
         verify(colaboradores).buscarPorId(1L);
+    }
+
+    @Test
+    @DisplayName("A ultima avaliacao traz o nivel mais recente ou vazio quando o colaborador nunca foi avaliado")
+    void ultimaAvaliacao() {
+        when(repository.findFirstByColaboradorIdOrderByAvaliadoEmDescIdDesc(1L)).thenReturn(Optional.of(
+                new AvaliacaoDeCompetencia(1L, PERFIL, INTERMEDIARIA, LocalDateTime.of(2026, 11, 20, 10, 0))));
+        when(repository.findFirstByColaboradorIdOrderByAvaliadoEmDescIdDesc(2L)).thenReturn(Optional.empty());
+
+        AvaliacaoResponseDTO ultima = service.ultimaAvaliacao(1L).orElseThrow();
+
+        assertEquals(INTERMEDIARIO, ultima.nivel());
+        assertEquals(10, ultima.perfil().horasSemanais());
+        assertEquals(Optional.empty(), service.ultimaAvaliacao(2L));
     }
 }

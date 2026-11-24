@@ -15,8 +15,9 @@ public class OpenApiConfig {
                 .version("1.0")
                 .description("API da US1: ofensiva de dias consecutivos de estudo, "
                         + "com recompensa automatica ao completar 7 dias seguidos. "
-                        + "Extensao da AF: cadastro de colaboradores e cursos e classificacao "
-                        + "do nivel de competencia por Machine Learning.")
+                        + "Extensao da AF: cadastro de colaboradores e cursos, classificacao "
+                        + "do nivel de competencia por Machine Learning, recomendacao de cursos por RAG "
+                        + "e agentes de IA com autorizacao do colaborador.")
                 .contact(new Contact().name("Yuri Peruzzo, Enzo Zorzetto, Pedro Ricci Gomes Nascimento")));
     }
 }
