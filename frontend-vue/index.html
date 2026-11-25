@@ -44,7 +44,8 @@
 <div id="app" class="box">
     <h1>Plataforma de Forma&ccedil;&atilde;o</h1>
     <p>Gamifica&ccedil;&atilde;o da AC1/AC2 e a extens&atilde;o da AF: cadastro de colaboradores e cursos e
-        classifica&ccedil;&atilde;o do n&iacute;vel de compet&ecirc;ncia por Machine Learning.</p>
+        classifica&ccedil;&atilde;o do n&iacute;vel de compet&ecirc;ncia por Machine Learning, recomenda&ccedil;&atilde;o
+        de cursos por RAG e agentes de IA com autoriza&ccedil;&atilde;o do colaborador.</p>
 
     <div class="abas">
         <button v-for="a in abas" :key="a.id" :class="{ ativa: aba === a.id }" @click="trocarAba(a.id)">{{ a.nome }}</button>
@@ -186,6 +187,92 @@
         </table>
     </section>
 
+    <section v-if="aba === 'recomendacao'">
+        <h2>Recomenda&ccedil;&atilde;o de cursos (RAG)</h2>
+        <p>O Spring Boot busca trechos dos documentos institucionais no servi&ccedil;o FastAPI de conhecimento,
+            cruza com o cat&aacute;logo e redige a recomenda&ccedil;&atilde;o citando as fontes.</p>
+        <label>Colaborador</label>
+        <select v-model="rag.colaboradorId">
+            <option value="">Selecione</option>
+            <option v-for="c in colaboradores" :key="c.id" :value="c.id">{{ c.id }} - {{ c.nome }}</option>
+        </select>
+        <label>Objetivo de estudo (opcional)</label>
+        <input v-model="rag.objetivo" maxlength="300" placeholder="Ex.: quero aprender mensageria e filas">
+        <button :disabled="carregando" @click="recomendar">{{ carregando ? 'Consultando documentos...' : 'Recomendar cursos' }}</button>
+
+        <div v-if="recomendacao" class="resultado">
+            <p>N&iacute;vel: <span :class="['nivel', recomendacao.nivel]">{{ recomendacao.nivel || 'não avaliado' }}</span>
+                &middot; modo: {{ recomendacao.modo }}</p>
+            <p>{{ recomendacao.resposta }}</p>
+            <table v-if="recomendacao.cursos.length">
+                <thead><tr><th>Curso</th><th>N&iacute;vel</th><th>Horas</th><th>Fonte</th></tr></thead>
+                <tbody>
+                <tr v-for="c in recomendacao.cursos" :key="c.id">
+                    <td>{{ c.titulo }}</td><td><span :class="['nivel', c.nivel]">{{ c.nivel }}</span></td>
+                    <td>{{ c.cargaHoraria }}</td><td>{{ c.fonte }}</td>
+                </tr>
+                </tbody>
+            </table>
+            <h3>Trechos recuperados</h3>
+            <div v-for="f in recomendacao.fontes" :key="f.id">
+                <small><b>[{{ f.id }}]</b> {{ f.documento }} / {{ f.secao }} &middot; relev&acirc;ncia {{ f.relevancia }}</small>
+                <p><small>{{ f.texto }}</small></p>
+            </div>
+        </div>
+    </section>
+
+    <section v-if="aba === 'orientacao'">
+        <h2>Agentes de IA: orienta&ccedil;&atilde;o e acompanhamento</h2>
+        <p>O agente orientador prop&otilde;e um plano usando s&oacute; ferramentas de consulta. Nada &eacute; executado
+            sem a autoriza&ccedil;&atilde;o do colaborador. Depois de autorizado, o agente de acompanhamento cria as etapas
+            e acompanha os prazos.</p>
+        <label>Colaborador</label>
+        <select v-model="orientacao.colaboradorId" @change="listarPlanos">
+            <option value="">Selecione</option>
+            <option v-for="c in colaboradores" :key="c.id" :value="c.id">{{ c.id }} - {{ c.nome }}</option>
+        </select>
+        <label>Objetivo de estudo (opcional)</label>
+        <input v-model="orientacao.objetivo" maxlength="300" placeholder="Ex.: quero trabalhar com backend">
+        <button :disabled="carregando" @click="proporPlano">{{ carregando ? 'Agentes trabalhando...' : 'Pedir plano ao agente orientador' }}</button>
+
+        <p v-if="planos.length === 0" class="vazio">Nenhum plano para o colaborador selecionado.</p>
+        <div v-for="p in planos" :key="p.id" class="resultado">
+            <p><b>Plano {{ p.id }}</b> &middot; {{ p.status }} &middot; n&iacute;vel {{ p.nivel || 'não avaliado' }}
+                &middot; modo: {{ p.modo }}</p>
+            <p>{{ p.orientacao }}</p>
+            <p><small>Cursos sugeridos: {{ p.cursosSugeridos.map(c => c.titulo).join(', ') }}</small></p>
+            <div v-if="p.status === 'AGUARDANDO_AUTORIZACAO'">
+                <button class="linha" @click="decidir(p.id, true)">Autorizar plano</button>
+                <button class="perigo" @click="decidir(p.id, false)">Recusar</button>
+            </div>
+            <table v-if="p.etapas.length">
+                <thead><tr><th>Etapa</th><th>Curso</th><th>Prazo</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                <tr v-for="e in p.etapas" :key="e.id">
+                    <td>{{ e.ordem }}</td><td>{{ e.tituloDoCurso }} ({{ e.cargaHoraria }} h)</td><td>{{ e.prazo }}</td>
+                    <td>{{ e.status }}</td>
+                    <td><button v-if="e.status === 'PENDENTE' && p.status === 'AUTORIZADO'" class="secundario linha"
+                                @click="concluirEtapa(p.id, e.id)">Concluir</button></td>
+                </tr>
+                </tbody>
+            </table>
+            <p><small>Acompanhamento: {{ p.acompanhamento.percentualConcluido }}% &middot; {{ p.acompanhamento.situacao }}</small></p>
+            <div class="barra"><div :style="{ width: p.acompanhamento.percentualConcluido + '%' }"></div></div>
+            <p v-for="a in p.acompanhamento.alertas" :key="a" class="msg erro">{{ a }}</p>
+            <details>
+                <summary><small>Auditoria dos agentes ({{ p.registrosDosAgentes.length }} usos de ferramentas)</small></summary>
+                <table>
+                    <thead><tr><th>Agente</th><th>Ferramenta</th><th>Detalhe</th></tr></thead>
+                    <tbody>
+                    <tr v-for="(r, i) in p.registrosDosAgentes" :key="i">
+                        <td>{{ r.agente }}</td><td>{{ r.ferramenta }}</td><td>{{ r.detalhe }}</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </details>
+        </div>
+    </section>
+
     <div v-if="mensagem" :class="['msg', erro ? 'erro' : 'ok']">{{ mensagem }}</div>
 </div>
 
@@ -203,6 +290,8 @@ createApp({
                 { id: 'colaboradores', nome: 'Colaboradores' },
                 { id: 'cursos', nome: 'Cursos' },
                 { id: 'competencia', nome: 'Competência (ML)' },
+                { id: 'recomendacao', nome: 'Recomendação (RAG)' },
+                { id: 'orientacao', nome: 'Agentes de IA' },
                 { id: 'ofensiva', nome: 'Ofensiva de estudos' }
             ],
             niveis: ['INICIANTE', 'INTERMEDIARIO', 'AVANCADO'],
@@ -218,7 +307,12 @@ createApp({
                 horasSemanais: 12, conheceRest: true, conheceBancoDeDados: false },
             resultado: null,
             historico: [],
-            classificando: false
+            classificando: false,
+            rag: { colaboradorId: '', objetivo: '' },
+            recomendacao: null,
+            orientacao: { colaboradorId: '', objetivo: '' },
+            planos: [],
+            carregando: false
         };
     },
     methods: {
@@ -247,7 +341,7 @@ createApp({
             this.mensagem = '';
             if (id === 'ofensiva') this.listar();
             if (id === 'cursos') this.listarCursos();
-            if (id === 'colaboradores' || id === 'competencia') this.listarColaboradores();
+            if (['colaboradores', 'competencia', 'recomendacao', 'orientacao'].includes(id)) this.listarColaboradores();
         },
         async listar() {
             try {
@@ -347,6 +441,68 @@ createApp({
             if (!this.avaliacao.colaboradorId) return;
             try {
                 this.historico = await this.request('/api/colaboradores/' + this.avaliacao.colaboradorId + '/competencias');
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        async recomendar() {
+            if (!this.rag.colaboradorId) return this.aviso('Selecione um colaborador', true);
+            this.carregando = true;
+            try {
+                this.recomendacao = await this.request('/api/colaboradores/' + this.rag.colaboradorId + '/recomendacoes', {
+                    method: 'POST',
+                    body: JSON.stringify({ objetivo: this.rag.objetivo })
+                });
+                this.aviso(this.recomendacao.cursos.length + ' curso(s) recomendado(s) a partir dos documentos');
+            } catch (e) {
+                this.recomendacao = null;
+                this.aviso(e.message, true);
+            } finally {
+                this.carregando = false;
+            }
+        },
+        async listarPlanos() {
+            this.planos = [];
+            if (!this.orientacao.colaboradorId) return;
+            try {
+                this.planos = await this.request('/api/colaboradores/' + this.orientacao.colaboradorId + '/planos');
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        async proporPlano() {
+            if (!this.orientacao.colaboradorId) return this.aviso('Selecione um colaborador', true);
+            this.carregando = true;
+            try {
+                const p = await this.request('/api/colaboradores/' + this.orientacao.colaboradorId + '/planos', {
+                    method: 'POST',
+                    body: JSON.stringify({ objetivo: this.orientacao.objetivo })
+                });
+                this.aviso('Plano ' + p.id + ' proposto. Ele aguarda a autorizacao do colaborador.');
+                await this.listarPlanos();
+            } catch (e) {
+                this.aviso(e.message, true);
+            } finally {
+                this.carregando = false;
+            }
+        },
+        async decidir(planoId, autorizado) {
+            try {
+                const p = await this.request('/api/planos/' + planoId + '/decisao', {
+                    method: 'POST',
+                    body: JSON.stringify({ autorizado })
+                });
+                this.aviso('Plano ' + p.id + (autorizado ? ' autorizado: ' + p.etapas.length + ' etapa(s) criada(s)' : ' recusado'));
+                await this.listarPlanos();
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        async concluirEtapa(planoId, etapaId) {
+            try {
+                const p = await this.request('/api/planos/' + planoId + '/etapas/' + etapaId + '/conclusao', { method: 'POST' });
+                this.aviso('Etapa concluida. Progresso: ' + p.acompanhamento.percentualConcluido + '%');
+                await this.listarPlanos();
             } catch (e) {
                 this.aviso(e.message, true);
             }

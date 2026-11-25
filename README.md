@@ -605,11 +605,12 @@ case-a-gamificacao-cursos/
 - Banco H2 (perfil `h2`) e PostgreSQL 16 (perfil `postgres`)
 - springdoc-openapi 2.8.11 (Swagger UI)
 - Vue.js 3
-- Docker e Docker Compose (app + ml + postgres + pgadmin + prometheus + grafana)
+- Docker e Docker Compose (app + ml + conhecimento + postgres + pgadmin + prometheus + grafana)
 - JUnit Jupiter e Cucumber 7 (cucumber-java + cucumber-junit-platform-engine)
 - JaCoCo 0.8.12 (cobertura de testes)
 - Spring Boot Actuator, Micrometer, Prometheus e Grafana (observabilidade)
-- Python 3.11, FastAPI e scikit-learn (serviço de Machine Learning da AF), pytest
+- Python 3.11, FastAPI e scikit-learn (serviços de Machine Learning e de conhecimento da AF), pytest
+- Spring AI 1.1.8 com OpenAI (ChatClient, tool calling e saída estruturada), opcional por `OPENAI_API_KEY`
 - IntelliJ IDEA Ultimate
 
 ---
@@ -1554,3 +1555,217 @@ Catálogo carregado e filtros (RF01):
 Classificação de competência pelo ML (RF02):
 
 ![Classificação por ML](docs/evidencias/08-af-competencia-ml.jpg)
+
+## Parte do Yuri: RF03 e RF04
+
+### Estrutura
+
+```text
+src/main/java/br/edu/gamificacaocursos/
+├── recomendacao/                      RF03
+│   ├── api/                           RecomendacaoRestController, DTOs
+│   ├── application/                   RecomendacaoService, BuscaDeDocumentos (porta), RedatorDeRecomendacao (porta)
+│   ├── domain/                        TrechoDeDocumento, ResultadoDaPesquisa, RespostaRedigida
+│   └── internal/
+│       ├── conhecimento/              ConhecimentoHttpAdapter, ClienteDoConhecimentoConfig
+│       └── ia/                        RedatorDeRecomendacaoAdapter (Spring AI ou modo extrativo)
+├── orientacao/                        RF04
+│   ├── api/                           PlanoRestController, DTOs
+│   ├── application/                   OrientacaoService (coordenador), AgenteOrientador,
+│   │                                  AgenteDeAcompanhamento, FerramentasDoOrientador (@Tool),
+│   │                                  PoliticaDeAcessoDosAgentes, PlanejadorComIa (porta)
+│   ├── domain/                        PlanoDeEstudos, EtapaDoPlano, RegistroDeAgente, Acompanhamento
+│   └── internal/
+│       ├── ia/                        PlanejadorComSpringAi (ChatClient + tool calling)
+│       └── persistence/               PlanoDeEstudosRepository
+└── shared/
+    ├── ia/                            AssistenteDeIa (liga o Spring AI só quando há chave)
+    └── web/                           AcessoNegadoException (403) e conflito de estado (409)
+conhecimento/                          serviço FastAPI de documentos institucionais
+├── documentos/*.md                    7 documentos: política, trilhas, acompanhamento, uso de IA
+├── app.py                             /health, /documentos e /buscar (TF-IDF)
+├── tests/test_app.py                  testes com pytest
+└── Dockerfile                         estágio "teste" e imagem final
+```
+
+### Spring AI sem depender de chave
+
+A avaliação exige que tudo suba só com `docker compose up --build`, sem nenhum passo manual. Por
+isso a IA generativa é **opcional**:
+
+| Situação | RF03 (redação da recomendação) | RF04 (agente orientador) |
+|---|---|---|
+| Sem `OPENAI_API_KEY` (padrão) | Modo **extrativo**: monta a resposta com os cursos e os trechos recuperados | Agente **determinístico**: usa as mesmas ferramentas e propõe os cursos citados nos documentos |
+| Com `OPENAI_API_KEY` | `ChatClient` do Spring AI redige a recomendação citando os trechos | `ChatClient` com **tool calling** e saída estruturada (`PropostaDoModelo`) |
+| LLM com erro ou resposta vazia | Volta para o modo extrativo | Volta para o agente determinístico |
+
+O `AssistenteDeIa` só liga o Spring AI quando há chave. A resposta sempre informa o `modo` usado.
+Para ligar o LLM, basta exportar a variável antes do mesmo comando:
+
+```bash
+OPENAI_API_KEY=sua-chave docker compose up --build
+```
+
+### RF03: recomendação de cursos por RAG
+
+```mermaid
+sequenceDiagram
+    participant F as Front-end Vue
+    participant R as RecomendacaoService
+    participant P as CompetenciaService
+    participant K as Serviço de conhecimento (FastAPI)
+    participant C as CursoService
+    participant L as Redator (Spring AI ou extrativo)
+    F->>R: POST /api/colaboradores/{id}/recomendacoes {objetivo}
+    R->>P: nível da última avaliação (RF02)
+    R->>K: GET /buscar?q=objetivo + trilha do nível&k=4 (REST, timeout de 2 s)
+    K-->>R: trechos com id, documento, seção e relevância
+    R->>C: catálogo de cursos
+    R->>R: cursos citados nos trechos, do nível do colaborador primeiro (máx. 3)
+    R->>L: redigir(nível, objetivo, cursos, trechos)
+    L-->>F: resposta, modo, cursos com a fonte e os trechos usados
+```
+
+| Método | Endpoint | O que faz |
+|---|---|---|
+| POST | `/api/colaboradores/{id}/recomendacoes` | Recomenda cursos e devolve as fontes usadas. O corpo `{"objetivo": "..."}` é opcional |
+| GET | `localhost:8002/buscar?q=&k=` | Busca direta nos documentos institucionais |
+| GET | `localhost:8002/documentos` | Lista os documentos e as seções indexadas |
+| GET | `localhost:8002/docs` | Documentação interativa do serviço de conhecimento |
+
+**Recuperação.** Os documentos institucionais ficam em `conhecimento/documentos` como Markdown. Cada
+seção `##` vira um trecho com id próprio (por exemplo `trilha-intermediaria#3`). O serviço indexa os
+trechos com **TF-IDF** (scikit-learn, unigramas e bigramas, sem acentos e sem palavras vazias) e
+ordena por similaridade de cosseno. Trechos com relevância zero não são devolvidos.
+
+**Geração aumentada.** O Spring Boot não confia em texto livre para escolher cursos. Ele procura
+os títulos do catálogo dentro dos trechos recuperados, então só recomenda cursos que existem e que um
+documento cita. Cada curso volta com o id do trecho que o justificou. Com o LLM ligado, o prompt
+de sistema manda tratar os trechos como dados e nunca como instruções, como proteção contra prompt
+injection, e pede a citação do id de cada trecho.
+
+**Falhas.** Erro ou timeout no serviço de conhecimento vira **HTTP 503**. Quando a busca não traz
+nenhum trecho, a resposta diz isso, com `modo: "sem fontes"`, sem inventar recomendação.
+Cadastro, consulta e classificação continuam funcionando com o serviço de conhecimento desligado
+(RNF04).
+
+### RF04: agentes de IA com autorização do colaborador
+
+Dois agentes com papéis separados, coordenados pelo `OrientacaoService`:
+
+| Agente | Papel | Ferramentas liberadas |
+|---|---|---|
+| `agente-orientador` | Monta a proposta de plano de estudos. Só consulta e não executa nada | `consultarNivel`, `buscarDocumentos`, `consultarCurso` |
+| `agente-de-acompanhamento` | Depois da autorização, cria as etapas com prazos e acompanha o andamento | `consultarDisponibilidade`, `consultarCurso`, `criarEtapas` |
+
+```mermaid
+sequenceDiagram
+    participant U as Colaborador
+    participant O as OrientacaoService
+    participant AO as Agente orientador
+    participant AA as Agente de acompanhamento
+    participant B as PostgreSQL
+    U->>O: POST /api/colaboradores/{id}/planos {objetivo}
+    O->>AO: propor(colaborador, objetivo)
+    AO->>AO: consultarNivel, buscarDocumentos (RAG do RF03)
+    AO->>AO: LLM com tool calling ou modo determinístico, validação dos ids
+    O->>B: plano AGUARDANDO_AUTORIZACAO + registro dos usos de ferramentas
+    O-->>U: 201 com a proposta. Nenhuma ação executada
+    U->>O: POST /api/planos/{id}/decisao {autorizado: true}
+    O->>AA: criarEtapas(plano)
+    AA->>AA: consultarDisponibilidade (horas semanais do RF02), consultarCurso
+    O->>B: plano AUTORIZADO com as etapas e os prazos
+    U->>O: POST /api/planos/{id}/etapas/{etapa}/conclusao
+    O->>AA: acompanhar(plano): progresso, próxima etapa e atrasos
+```
+
+| Método | Endpoint | O que faz |
+|---|---|---|
+| POST | `/api/colaboradores/{id}/planos` | O agente orientador propõe um plano, que fica `AGUARDANDO_AUTORIZACAO` |
+| GET | `/api/colaboradores/{id}/planos` | Planos do colaborador, do mais recente ao mais antigo |
+| GET | `/api/planos/{id}` | Plano com etapas, acompanhamento e auditoria dos agentes |
+| POST | `/api/planos/{id}/decisao` | O colaborador autoriza (`{"autorizado": true}`) ou recusa (`false`) |
+| POST | `/api/planos/{id}/etapas/{etapaId}/conclusao` | Marca a etapa como concluída |
+| GET | `/api/agentes/permissoes` | Política de ferramentas de cada agente |
+
+**Autorização do usuário.** O plano nasce como `AGUARDANDO_AUTORIZACAO`, e nada é criado em nome do
+colaborador antes da decisão. A recusa encerra o plano como `RECUSADO`, sem etapas. Um plano já
+decidido não aceita nova decisão e devolve **HTTP 409**. Etapas só podem ser concluídas em planos
+`AUTORIZADO`. Quando todas são concluídas, o plano passa a `CONCLUIDO`.
+
+**Controle de acesso dos agentes (RNF03).**
+- A `PoliticaDeAcessoDosAgentes` nega por padrão: cada agente só usa as ferramentas da sua lista.
+  Qualquer outra chamada lança `AcessoNegadoException` (**HTTP 403**). O orientador não consegue usar
+  `criarEtapas`.
+- Ao LLM vão só as ferramentas de consulta do orientador. A ferramenta que escreve (`criarEtapas`)
+  nunca é oferecida ao modelo e só roda depois da autorização humana.
+- Os agentes não recebem nome nem e-mail. Trabalham com o id interno, o nível, o objetivo e o
+  catálogo público.
+- **Guardrail na saída do LLM:** os ids de curso propostos pelo modelo são filtrados contra os cursos
+  que as ferramentas realmente encontraram, sem repetição e com no máximo 3. Uma proposta vazia ou
+  inválida é descartada, e o agente determinístico assume.
+- **Auditoria:** cada uso de ferramenta fica gravado no plano (`registrosDosAgentes`), com agente,
+  ferramenta, detalhe e horário.
+
+**Acompanhamento.** O prazo de cada etapa é a carga horária do curso dividida pelas horas semanais da
+última avaliação de competência, arredondada para cima em semanas. Sem avaliação, a conta usa 4 h
+por semana. As etapas são encadeadas uma após a outra. O agente de acompanhamento informa o
+percentual concluído, a próxima etapa com prazo e um alerta para cada etapa atrasada.
+
+### Testes
+
+| Camada | Classe de teste | Testes | Técnica |
+|---|---|---|---|
+| Serviço RAG | `RecomendacaoServiceTest` | 6 | Mockito, `ArgumentCaptor`, prioridade por nível e por citações, normalização de acentos |
+| Integração HTTP | `ConhecimentoHttpAdapterTest` | 3 | `MockRestServiceServer` (sucesso, corpo vazio, 500) |
+| Spring AI no RF03 | `RedatorDeRecomendacaoAdapterTest` | 5 | `ChatModel` simulado: modo extrativo, LLM, falha e resposta vazia |
+| API RF03 | `RecomendacaoRestControllerTest` | 3 | `@SpringBootTest` + MockMvc + `@MockitoBean` na busca de documentos |
+| Domínio | `PlanoDeEstudosTest` | 5 | Transições de estado, etapas, cortes de tamanho |
+| Política (RNF03) | `PoliticaDeAcessoDosAgentesTest` | 3 | Negação por padrão e separação de papéis |
+| Agente orientador | `AgenteOrientadorTest` | 6 | Modo sem LLM, guardrail dos ids, propostas inválidas, ferramentas |
+| Agente de acompanhamento | `AgenteDeAcompanhamentoTest` | 3 | Prazos, horas padrão, alertas de atraso |
+| Coordenador | `OrientacaoServiceTest` | 5 | Mockito, `InOrder`, `verifyNoInteractions` |
+| Spring AI no RF04 | `PlanejadorComSpringAiTest` | 3 | `ChatModel` simulado: confere as ferramentas oferecidas e a saída estruturada |
+| API RF04 | `PlanoRestControllerTest` | 3 | Fluxo completo: propor, autorizar, concluir; recusa e 409 |
+| Suporte | `AssistenteDeIaTest`, `ApiExceptionHandlerTest`, `CompetenciaServiceTest` | 4 | Chave ligada e desligada, 403 e 409, última avaliação |
+| Serviço de conhecimento (Python) | `conhecimento/tests/test_app.py` | 7 | pytest + `TestClient` do FastAPI |
+
+Resultado do `mvn clean install`: **120 testes** (71 até a parte do Pedro + 49 novos), **0 falhas**
+e **JaCoCo com 100%** de instruções, desvios, linhas e métodos. Os testes Python rodam no estágio
+`teste` da imagem:
+
+```bash
+docker build --target teste conhecimento
+```
+
+Saída: `7 passed`.
+
+### Como testar
+
+Depois do `docker compose up --build`:
+
+| Serviço | Endereço |
+|---|---|
+| Front-end (abas Recomendação (RAG) e Agentes de IA) | http://localhost:8080 |
+| Swagger (grupos "Recomendacoes (RAG)" e "Orientacao (agentes de IA)") | http://localhost:8080/swagger-ui.html |
+| Serviço de conhecimento | http://localhost:8002/docs |
+
+Exemplo pela linha de comando, com o colaborador 1 já cadastrado:
+
+```bash
+curl -X POST localhost:8080/api/colaboradores/1/recomendacoes -H "Content-Type: application/json" -d "{\"objetivo\":\"quero aprender mensageria e filas\"}"
+curl -X POST localhost:8080/api/colaboradores/1/planos -H "Content-Type: application/json" -d "{\"objetivo\":\"backend com Spring\"}"
+curl -X POST localhost:8080/api/planos/1/decisao -H "Content-Type: application/json" -d "{\"autorizado\":true}"
+curl localhost:8080/api/planos/1
+```
+
+### Evidências
+
+Recomendação por RAG com os cursos, as fontes e os trechos recuperados (RF03):
+
+![Recomendação por RAG](docs/evidencias/09-af-recomendacao-rag.jpg)
+
+Plano proposto pelo agente orientador, autorizado pelo colaborador, com etapas, acompanhamento e
+auditoria das ferramentas usadas pelos agentes (RF04):
+
+![Agentes de IA](docs/evidencias/10-af-agentes-ia.jpg)

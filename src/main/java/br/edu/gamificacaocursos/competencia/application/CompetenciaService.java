@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class CompetenciaService {
@@ -44,6 +45,11 @@ public class CompetenciaService {
         return repository.findByColaboradorIdOrderByAvaliadoEmDescIdDesc(colaboradorId).stream()
                 .map(this::toDTO)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<AvaliacaoResponseDTO> ultimaAvaliacao(Long colaboradorId) {
+        return repository.findFirstByColaboradorIdOrderByAvaliadoEmDescIdDesc(colaboradorId).map(this::toDTO);
     }
 
     private AvaliacaoResponseDTO toDTO(AvaliacaoDeCompetencia avaliacao) {

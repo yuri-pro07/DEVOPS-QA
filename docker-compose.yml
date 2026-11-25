@@ -50,12 +50,16 @@ services:
         condition: service_healthy
       ml:
         condition: service_started
+      conhecimento:
+        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: postgres
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/gamificacao_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       ML_URL: http://ml:8000
+      CONHECIMENTO_URL: http://conhecimento:8000
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sem-chave}
     ports:
       - "8080:8080"
     networks:
@@ -77,6 +81,21 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+    networks:
+      - app_net
+
+  conhecimento:
+    build: ./conhecimento
+    container_name: gamificacao-conhecimento
+    restart: always
+    ports:
+      - "8002:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     networks:
       - app_net
 
