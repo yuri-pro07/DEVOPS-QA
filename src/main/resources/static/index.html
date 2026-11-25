@@ -45,7 +45,8 @@
     <h1>Plataforma de Forma&ccedil;&atilde;o</h1>
     <p>Gamifica&ccedil;&atilde;o da AC1/AC2 e a extens&atilde;o da AF: cadastro de colaboradores e cursos e
         classifica&ccedil;&atilde;o do n&iacute;vel de compet&ecirc;ncia por Machine Learning, recomenda&ccedil;&atilde;o
-        de cursos por RAG e agentes de IA com autoriza&ccedil;&atilde;o do colaborador.</p>
+        de cursos por RAG, agentes de IA com autoriza&ccedil;&atilde;o do colaborador e treinamento do modelo
+        por fila no RabbitMQ.</p>
 
     <div class="abas">
         <button v-for="a in abas" :key="a.id" :class="{ ativa: aba === a.id }" @click="trocarAba(a.id)">{{ a.nome }}</button>
@@ -273,6 +274,44 @@
         </div>
     </section>
 
+    <section v-if="aba === 'treinamentos'">
+        <h2>Treinamentos do modelo (RabbitMQ)</h2>
+        <p>A solicita&ccedil;&atilde;o &eacute; gravada e publicada numa fila do RabbitMQ. Um worker Python consome a fila
+            e pede o treino ao servi&ccedil;o de ML. Se o ML estiver fora do ar, a solicita&ccedil;&atilde;o continua aceita
+            e &eacute; tentada de novo ap&oacute;s 10 s de espera. O andamento abaixo se atualiza sozinho.</p>
+        <div class="campos">
+            <div><label>Solicitante</label><input v-model="treino.solicitante" maxlength="100" placeholder="Seu nome"></div>
+            <div><label>Amostras (1000 a 200000)</label>
+                <input type="number" v-model.number="treino.amostras" min="1000" max="200000"></div>
+            <div><label>Semente (opcional)</label><input type="number" v-model.number="treino.semente" min="0"></div>
+        </div>
+        <label>Motivo (opcional)</label>
+        <input v-model="treino.motivo" maxlength="300" placeholder="Ex.: retreino mensal do modelo">
+        <button @click="solicitarTreinamento">Solicitar treinamento</button>
+
+        <p v-if="treinamentos.length === 0" class="vazio">Nenhuma solicita&ccedil;&atilde;o de treinamento.</p>
+        <div v-for="t in treinamentos" :key="t.id" class="resultado">
+            <p><b>Solicita&ccedil;&atilde;o {{ t.id }}</b> &middot; {{ t.status }} &middot; {{ t.solicitante }}
+                &middot; {{ t.amostras }} amostras &middot; tentativas: {{ t.tentativas }}</p>
+            <div class="barra"><div :style="{ width: t.percentual + '%' }"></div></div>
+            <p><small>{{ t.percentual }}% &middot; {{ t.situacao }}</small></p>
+            <p v-if="t.modelo"><small>Modelo v{{ t.modelo.versao }} &middot; acur&aacute;cia {{ t.modelo.acuracia }}
+                &middot; F1 {{ t.modelo.f1Macro }} &middot; semente {{ t.modelo.semente }}
+                &middot; {{ t.modelo.amostrasDeTreino }} amostras de treino</small></p>
+            <details :open="!t.finalizado">
+                <summary><small>Hist&oacute;rico ({{ t.historico.length }} eventos)</small></summary>
+                <table>
+                    <thead><tr><th>Hora</th><th>Status</th><th>Detalhe</th></tr></thead>
+                    <tbody>
+                    <tr v-for="(e, i) in t.historico" :key="i">
+                        <td>{{ hora(e.registradoEm) }}</td><td>{{ e.status }}</td><td>{{ e.detalhe }}</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </details>
+        </div>
+    </section>
+
     <div v-if="mensagem" :class="['msg', erro ? 'erro' : 'ok']">{{ mensagem }}</div>
 </div>
 
@@ -292,6 +331,7 @@ createApp({
                 { id: 'competencia', nome: 'Competência (ML)' },
                 { id: 'recomendacao', nome: 'Recomendação (RAG)' },
                 { id: 'orientacao', nome: 'Agentes de IA' },
+                { id: 'treinamentos', nome: 'Treinamentos (RabbitMQ)' },
                 { id: 'ofensiva', nome: 'Ofensiva de estudos' }
             ],
             niveis: ['INICIANTE', 'INTERMEDIARIO', 'AVANCADO'],
@@ -312,7 +352,10 @@ createApp({
             recomendacao: null,
             orientacao: { colaboradorId: '', objetivo: '' },
             planos: [],
-            carregando: false
+            carregando: false,
+            treino: { solicitante: '', motivo: '', amostras: 20000, semente: '' },
+            treinamentos: [],
+            temporizador: null
         };
     },
     methods: {
@@ -341,6 +384,10 @@ createApp({
             this.mensagem = '';
             if (id === 'ofensiva') this.listar();
             if (id === 'cursos') this.listarCursos();
+            if (id === 'treinamentos') {
+                this.listarTreinamentos();
+                this.acompanharTreinamentos();
+            }
             if (['colaboradores', 'competencia', 'recomendacao', 'orientacao'].includes(id)) this.listarColaboradores();
         },
         async listar() {
@@ -506,6 +553,42 @@ createApp({
             } catch (e) {
                 this.aviso(e.message, true);
             }
+        },
+        async listarTreinamentos() {
+            try {
+                this.treinamentos = await this.request('/api/treinamentos');
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        acompanharTreinamentos() {
+            clearInterval(this.temporizador);
+            this.temporizador = setInterval(() => {
+                if (this.aba !== 'treinamentos') return clearInterval(this.temporizador);
+                if (this.treinamentos.some(t => !t.finalizado)) this.listarTreinamentos();
+            }, 2000);
+        },
+        async solicitarTreinamento() {
+            if (!this.treino.solicitante.trim()) return this.aviso('Informe o solicitante', true);
+            try {
+                const t = await this.request('/api/treinamentos', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        solicitante: this.treino.solicitante,
+                        motivo: this.treino.motivo,
+                        amostras: this.treino.amostras === '' ? null : this.treino.amostras,
+                        semente: this.treino.semente === '' ? null : this.treino.semente
+                    })
+                });
+                this.aviso('Solicitacao ' + t.id + ' aceita (' + t.status + '). Acompanhe o andamento abaixo.');
+                await this.listarTreinamentos();
+                this.acompanharTreinamentos();
+            } catch (e) {
+                this.aviso(e.message, true);
+            }
+        },
+        hora(dataHora) {
+            return dataHora ? dataHora.slice(11, 19) : '';
         },
         async avaliar() {
             if (!this.avaliacao.colaboradorId) return this.aviso('Selecione um colaborador', true);

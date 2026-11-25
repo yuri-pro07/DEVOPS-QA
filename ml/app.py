@@ -1,15 +1,23 @@
 import json
+import time
 from contextlib import asynccontextmanager
 from threading import Lock
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from joblib import load
 from pydantic import BaseModel, Field
 
-from treinamento import ARQUIVO_DE_METADADOS, ARQUIVO_DO_MODELO, NOME_DO_MODELO, precisa_treinar, treinar
+from treinamento import (AMOSTRAS_PADRAO, ARQUIVO_DE_METADADOS, ARQUIVO_DO_MODELO, NOME_DO_MODELO, precisa_treinar,
+                         treinar)
 
 trava = Lock()
 cache = {"modelo": None, "versao": None, "carimbo": None}
+
+
+class PedidoDeTreinamento(BaseModel):
+    semente: Optional[int] = Field(default=None, ge=0, le=2_147_483_647)
+    amostras: int = Field(default=AMOSTRAS_PADRAO, ge=1000, le=200_000)
 
 
 class Perfil(BaseModel):
@@ -72,3 +80,11 @@ def classificar(perfil: Perfil):
         "probabilidades": {str(n): round(float(p), 4) for n, p in zip(classificador.classes_, probabilidades)},
         "modelo": NOME_DO_MODELO + " v" + versao,
     }
+
+
+@app.post("/treinamentos")
+def treinar_novo_modelo(pedido: PedidoDeTreinamento):
+    semente = pedido.semente if pedido.semente is not None else int(time.time()) % 1_000_000
+    metadados = treinar(semente, pedido.amostras)
+    modelo_atual()
+    return metadados

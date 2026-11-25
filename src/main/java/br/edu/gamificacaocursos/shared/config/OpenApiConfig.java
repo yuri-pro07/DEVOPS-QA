@@ -17,7 +17,8 @@ public class OpenApiConfig {
                         + "com recompensa automatica ao completar 7 dias seguidos. "
                         + "Extensao da AF: cadastro de colaboradores e cursos, classificacao "
                         + "do nivel de competencia por Machine Learning, recomendacao de cursos por RAG "
-                        + "e agentes de IA com autorizacao do colaborador.")
+                        + "agentes de IA com autorizacao do colaborador e treinamento do modelo "
+                        + "por fila no RabbitMQ, com acompanhamento do andamento.")
                 .contact(new Contact().name("Yuri Peruzzo, Enzo Zorzetto, Pedro Ricci Gomes Nascimento")));
     }
 }

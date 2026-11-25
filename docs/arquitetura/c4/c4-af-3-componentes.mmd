@@ -1,0 +1,35 @@
+C4Component
+    title C4 nível 3: Componentes do Núcleo Spring Boot
+
+    Container(web, "Interface Web", "Vue 3")
+    ContainerDb(db, "PostgreSQL 16", "JDBC")
+    Container(ml, "Serviço de ML", "FastAPI")
+    Container(rag, "Serviço de conhecimento", "FastAPI")
+    ContainerQueue(mq, "RabbitMQ", "AMQP")
+    System_Ext(openai, "OpenAI API", "opcional")
+
+    Container_Boundary(core, "Núcleo Spring Boot") {
+        Component(cad, "colaborador e curso", "api, application, domain, persistence", "RF01: cadastro e consulta")
+        Component(comp, "competencia", "CompetenciaService + FastApiClassificadorAdapter", "RF02: classificação por ML")
+        Component(rec, "recomendacao", "RecomendacaoService + ConhecimentoHttpAdapter + Redator", "RF03: RAG com fontes")
+        Component(ori, "orientacao", "OrientacaoService, agentes, PoliticaDeAcessoDosAgentes", "RF04: agentes com autorização")
+        Component(tre, "treinamento", "TreinamentoService, RabbitFilaDeTreinamentos, OuvinteDoAndamento", "RF05 e RNF02")
+        Component(sh, "shared", "ApiExceptionHandler, AssistenteDeIa", "Erros 400, 403, 409 e 503; IA opcional")
+    }
+
+    Rel(web, cad, "REST")
+    Rel(web, comp, "REST")
+    Rel(web, rec, "REST")
+    Rel(web, ori, "REST")
+    Rel(web, tre, "REST")
+    Rel(rec, comp, "Nível atual", "chamada de método")
+    Rel(ori, rec, "Ferramenta buscarDocumentos", "chamada de método")
+    Rel(comp, ml, "POST /predict", "REST")
+    Rel(rec, rag, "GET /buscar", "REST")
+    Rel(rec, openai, "ChatClient", "HTTPS")
+    Rel(ori, openai, "ChatClient + tools", "HTTPS")
+    Rel(tre, mq, "Publica e consome", "AMQP")
+    Rel(cad, db, "JPA")
+    Rel(tre, db, "JPA")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
