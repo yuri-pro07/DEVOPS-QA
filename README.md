@@ -1,4 +1,6 @@
-# Case A — Gamificação para Engajamento de Educação Continuada
+# EvoluIA: Plataforma de Formação com IA
+
+Projeto da equipe para o **Case A: Gamificação para Engajamento de Educação Continuada**, estendido na AF com ML, RAG, agentes de IA e mensageria.
 
 Entrega da equipe aplicando **ATDD → BDD → TDD**.
 
@@ -7,9 +9,11 @@ Entrega da equipe aplicando **ATDD → BDD → TDD**.
 
 ## 👥 Equipe
 
-- Yuri Peruzzo
-- Enzo Zorzetto
-- Pedro Ricci Gomes Nascimento
+| Nome | RA |
+|---|---|
+| Yuri Peruzzo | 248732 |
+| Enzo Zorzetto | 234974 |
+| Pedro Ricci Gomes Nascimento | 234923 |
 
 ## 📖 Descrição do estudo de caso
 
@@ -628,7 +632,7 @@ O registro arquitetural cumulativo também vive em
 enunciado. O conteúdo abaixo é o mesmo, mantido aqui para que a leitura do projeto seja contínua:
 AC1 → BLUE → B1.
 
-**Equipe (3 integrantes):** Yuri Peruzzo · Enzo Zorzetto · Pedro Ricci Gomes Nascimento
+**Equipe (3 integrantes):** Yuri Peruzzo (RA 248732) · Enzo Zorzetto (RA 234974) · Pedro Ricci Gomes Nascimento (RA 234923)
 
 | Desafio | Tema | Status |
 |---|---|---|

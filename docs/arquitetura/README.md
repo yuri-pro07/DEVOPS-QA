@@ -1,9 +1,11 @@
-# Registro Arquitetural — Case A: Gamificação para Educação Continuada
+# EvoluIA: Registro Arquitetural
+
+Case A: Gamificação para Educação Continuada, estendido na AF com ML, RAG, agentes de IA e mensageria.
 
 Registro cumulativo das decisões do Architecture Lab (B1). Cada desafio acrescenta uma linha à
 matriz de ASRs, um ADR e a visão C4 afetada.
 
-**Equipe (3 integrantes):** Yuri Peruzzo · Enzo Zorzetto · Pedro Ricci Gomes Nascimento
+**Equipe (3 integrantes):** Yuri Peruzzo (RA 248732) · Enzo Zorzetto (RA 234974) · Pedro Ricci Gomes Nascimento (RA 234923)
 
 | Desafio | Tema | ADR | Status |
 |---|---|---|---|
