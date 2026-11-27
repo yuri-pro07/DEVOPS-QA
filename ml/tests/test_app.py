@@ -57,3 +57,31 @@ def test_metadados_mostram_a_qualidade_do_modelo():
     assert corpo["regra"] == "pontuacao-v2"
     assert corpo["acuracia"] >= 0.8
     assert corpo["f1_macro"] >= 0.8
+
+
+def test_treina_nova_versao_com_os_parametros_pedidos():
+    with TestClient(app) as cliente:
+        antes = cliente.get("/modelo").json()
+        resposta = cliente.post("/treinamentos", json={"semente": 7, "amostras": 5000})
+        depois = cliente.get("/modelo").json()
+        classificacao = cliente.post("/predict", json=SENIOR).json()
+    corpo = resposta.json()
+    assert resposta.status_code == 200
+    assert corpo["semente"] == 7
+    assert corpo["amostras_de_treino"] + corpo["amostras_de_teste"] == 5000
+    assert corpo["acuracia"] >= 0.8
+    assert depois["versao"] == corpo["versao"] != antes["versao"]
+    assert classificacao["modelo"] == "regressao-logistica v" + corpo["versao"]
+
+
+def test_treinamento_sem_semente_usa_uma_semente_gerada():
+    with TestClient(app) as cliente:
+        corpo = cliente.post("/treinamentos", json={}).json()
+    assert corpo["semente"] >= 0
+    assert corpo["amostras_de_treino"] + corpo["amostras_de_teste"] == 3000
+
+
+def test_recusa_treinamento_com_poucas_amostras():
+    with TestClient(app) as cliente:
+        resposta = cliente.post("/treinamentos", json={"amostras": 10})
+    assert resposta.status_code == 422

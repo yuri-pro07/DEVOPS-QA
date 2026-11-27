@@ -52,6 +52,8 @@ services:
         condition: service_started
       conhecimento:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: postgres
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/gamificacao_db
@@ -60,6 +62,9 @@ services:
       ML_URL: http://ml:8000
       CONHECIMENTO_URL: http://conhecimento:8000
       OPENAI_API_KEY: ${OPENAI_API_KEY:-sem-chave}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: gamificacao
+      RABBITMQ_PASSWORD: gamificacao
     ports:
       - "8080:8080"
     networks:
@@ -96,6 +101,43 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+    networks:
+      - app_net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: gamificacao-rabbitmq
+    hostname: rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: gamificacao
+      RABBITMQ_DEFAULT_PASS: gamificacao
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app_net
+
+  treinador:
+    build: ./treinador
+    container_name: gamificacao-treinador
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_URL: amqp://gamificacao:gamificacao@rabbitmq:5672/%2F
+      ML_URL: http://ml:8000
+      ESPERA_EM_SEGUNDOS: 10
+      MAXIMO_DE_TENTATIVAS: 60
     networks:
       - app_net
 
@@ -136,6 +178,7 @@ volumes:
   pgadmin_data:
   grafana_data:
   ml_models:
+  rabbitmq_data:
 
 networks:
   app_net:

@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,9 +26,10 @@ CARACTERISTICAS = [
 ]
 NIVEIS = ["INICIANTE", "INTERMEDIARIO", "AVANCADO"]
 REGRA_DE_ROTULAGEM = "pontuacao-v2"
+AMOSTRAS_PADRAO = 3000
 
 
-def gerar_dados(semente, quantidade=3000):
+def gerar_dados(semente, quantidade=AMOSTRAS_PADRAO):
     rng = np.random.default_rng(semente)
     x = np.column_stack([
         rng.integers(0, 120, quantidade),
@@ -50,8 +52,14 @@ def precisa_treinar():
     return metadados.get("regra") != REGRA_DE_ROTULAGEM
 
 
-def treinar(semente=42):
-    x, y = gerar_dados(semente)
+def gravar_atomicamente(destino, gravar):
+    temporario = destino.with_name(destino.name + "." + uuid.uuid4().hex + ".tmp")
+    gravar(temporario)
+    temporario.replace(destino)
+
+
+def treinar(semente=42, amostras=AMOSTRAS_PADRAO):
+    x, y = gerar_dados(semente, amostras)
     x_treino, x_teste, y_treino, y_teste = train_test_split(
         x, y, test_size=0.2, stratify=y, random_state=semente)
     modelo = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000, random_state=semente))
@@ -60,7 +68,7 @@ def treinar(semente=42):
     agora = datetime.now(timezone.utc)
     metadados = {
         "modelo": NOME_DO_MODELO,
-        "versao": agora.strftime("%Y%m%d%H%M%S"),
+        "versao": agora.strftime("%Y%m%d%H%M%S%f")[:17],
         "semente": semente,
         "regra": REGRA_DE_ROTULAGEM,
         "caracteristicas": CARACTERISTICAS,
@@ -72,8 +80,7 @@ def treinar(semente=42):
         "treinado_em": agora.isoformat(),
     }
     PASTA_DOS_MODELOS.mkdir(parents=True, exist_ok=True)
-    temporario = ARQUIVO_DO_MODELO.with_suffix(".tmp")
-    dump(modelo, temporario)
-    temporario.replace(ARQUIVO_DO_MODELO)
-    ARQUIVO_DE_METADADOS.write_text(json.dumps(metadados, ensure_ascii=False, indent=2), encoding="utf-8")
+    texto = json.dumps(metadados, ensure_ascii=False, indent=2)
+    gravar_atomicamente(ARQUIVO_DE_METADADOS, lambda caminho: caminho.write_text(texto, encoding="utf-8"))
+    gravar_atomicamente(ARQUIVO_DO_MODELO, lambda caminho: dump(modelo, caminho))
     return metadados

@@ -1,4 +1,6 @@
-# Case A — Gamificação para Engajamento de Educação Continuada
+# EvoluIA: Plataforma de Formação com IA
+
+Projeto da equipe para o **Case A: Gamificação para Engajamento de Educação Continuada**, estendido na AF com ML, RAG, agentes de IA e mensageria.
 
 Entrega da equipe aplicando **ATDD → BDD → TDD**.
 
@@ -7,9 +9,11 @@ Entrega da equipe aplicando **ATDD → BDD → TDD**.
 
 ## 👥 Equipe
 
-- Yuri Peruzzo
-- Enzo Zorzetto
-- Pedro Ricci Gomes Nascimento
+| Nome | RA |
+|---|---|
+| Yuri Peruzzo | 248732 |
+| Enzo Zorzetto | 234974 |
+| Pedro Ricci Gomes Nascimento | 234923 |
 
 ## 📖 Descrição do estudo de caso
 
@@ -605,12 +609,13 @@ case-a-gamificacao-cursos/
 - Banco H2 (perfil `h2`) e PostgreSQL 16 (perfil `postgres`)
 - springdoc-openapi 2.8.11 (Swagger UI)
 - Vue.js 3
-- Docker e Docker Compose (app + ml + conhecimento + postgres + pgadmin + prometheus + grafana)
+- Docker e Docker Compose (app + ml + conhecimento + treinador + rabbitmq + postgres + pgadmin + prometheus + grafana)
 - JUnit Jupiter e Cucumber 7 (cucumber-java + cucumber-junit-platform-engine)
 - JaCoCo 0.8.12 (cobertura de testes)
 - Spring Boot Actuator, Micrometer, Prometheus e Grafana (observabilidade)
 - Python 3.11, FastAPI e scikit-learn (serviços de Machine Learning e de conhecimento da AF), pytest
 - Spring AI 1.1.8 com OpenAI (ChatClient, tool calling e saída estruturada), opcional por `OPENAI_API_KEY`
+- RabbitMQ 3.13 com Spring AMQP e worker Python com pika (treinamento assíncrono do modelo)
 - IntelliJ IDEA Ultimate
 
 ---
@@ -627,7 +632,7 @@ O registro arquitetural cumulativo também vive em
 enunciado. O conteúdo abaixo é o mesmo, mantido aqui para que a leitura do projeto seja contínua:
 AC1 → BLUE → B1.
 
-**Equipe (3 integrantes):** Yuri Peruzzo · Enzo Zorzetto · Pedro Ricci Gomes Nascimento
+**Equipe (3 integrantes):** Yuri Peruzzo (RA 248732) · Enzo Zorzetto (RA 234974) · Pedro Ricci Gomes Nascimento (RA 234923)
 
 | Desafio | Tema | Status |
 |---|---|---|
@@ -1769,3 +1774,422 @@ Plano proposto pelo agente orientador, autorizado pelo colaborador, com etapas, 
 auditoria das ferramentas usadas pelos agentes (RF04):
 
 ![Agentes de IA](docs/evidencias/10-af-agentes-ia.jpg)
+
+## Parte do Enzo: RF05 e RNF02
+
+### Estrutura
+
+```text
+src/main/java/br/edu/gamificacaocursos/
+└── treinamento/                       RF05 e RNF02
+    ├── api/                           TreinamentoRestController, DTOs
+    ├── application/                   TreinamentoService, FilaDeTreinamentos (porta), ReenvioAgendado
+    ├── domain/                        SolicitacaoDeTreinamento, EventoDoTreinamento, StatusDoTreinamento,
+    │                                  PedidoDeTreinamento, AndamentoDoTreinamento, ResultadoDoTreinamento
+    └── internal/
+        ├── mensageria/                RabbitFilaDeTreinamentos, OuvinteDoAndamento, MensageriaConfig
+        └── persistence/               SolicitacaoDeTreinamentoRepository
+treinador/                             worker Python que consome a fila do RabbitMQ
+├── worker.py                          conexão, filas e consumo com pika
+├── processamento.py                   regra de cada tentativa e cliente HTTP do serviço de ML
+├── tests/test_processamento.py        testes com pytest
+└── Dockerfile                         estágio "teste" e imagem final
+ml/
+├── app.py                             novo endpoint POST /treinamentos
+└── treinamento.py                     treino com semente e quantidade de amostras escolhidas
+```
+
+### O fluxo
+
+O treinamento é uma tarefa longa e pode encontrar o serviço de ML fora do ar. Por isso ele não é
+chamado direto pelo Spring Boot. A solicitação é gravada, entra numa fila do RabbitMQ e um worker
+Python faz o resto. O usuário recebe **HTTP 202** na hora e acompanha o andamento depois.
+
+```mermaid
+sequenceDiagram
+    participant U as Front-end Vue
+    participant C as Núcleo Spring Boot
+    participant B as PostgreSQL
+    participant R as RabbitMQ
+    participant W as Worker treinador
+    participant M as Serviço ML (FastAPI)
+    U->>C: POST /api/treinamentos
+    C->>B: grava a solicitação (RECEBIDA)
+    C->>R: publica em treinamentos.solicitados
+    C->>B: marca como enviada (NA_FILA)
+    C-->>U: 202 Accepted + Location
+    R->>W: entrega o pedido (prefetch 1)
+    W->>M: GET /health
+    alt ML fora do ar
+        W->>R: andamento AGUARDANDO_ML
+        W->>R: pedido em treinamentos.espera (TTL 10 s)
+        R->>W: depois de 10 s o pedido volta para treinamentos.solicitados
+    else ML disponível
+        W->>R: andamento EM_TREINAMENTO
+        W->>M: POST /treinamentos
+        M-->>W: versão, acurácia e F1 do novo modelo
+        W->>R: andamento CONCLUIDO com o resultado
+    end
+    R->>C: OuvinteDoAndamento (treinamentos.andamento)
+    C->>B: atualiza status, tentativas e histórico
+    U->>C: GET /api/treinamentos/{id} (a tela consulta a cada 2 s)
+```
+
+As três filas são duráveis e as mensagens são persistentes, então nada se perde se o RabbitMQ
+reiniciar:
+
+| Fila | Quem publica | Quem consome | Para que serve |
+|---|---|---|---|
+| `treinamentos.solicitados` | Núcleo Spring Boot | Worker treinador | Pedidos de treino |
+| `treinamentos.espera` | Worker treinador | Ninguém. Após 10 s (TTL) a mensagem volta por dead-letter | Espera entre tentativas quando o ML está fora |
+| `treinamentos.andamento` | Worker treinador | Núcleo Spring Boot | Eventos de andamento de cada solicitação |
+
+### RF05: acompanhar o andamento
+
+| Método | Endpoint | O que faz |
+|---|---|---|
+| POST | `/api/treinamentos` | Registra a solicitação (solicitante, motivo, amostras de 1.000 a 200.000, semente opcional) e responde 202 |
+| GET | `/api/treinamentos` | Lista as 20 solicitações mais recentes com o andamento |
+| GET | `/api/treinamentos/{id}` | Status, percentual, tentativas, modelo gerado e histórico completo |
+| POST | `localhost:8001/treinamentos` | Endpoint do serviço de ML chamado pelo worker |
+| GET | `localhost:15672` | Painel do RabbitMQ (usuário e senha `gamificacao`) |
+
+Cada solicitação passa por estes estados:
+
+| Status | % | Quem informa | Significado |
+|---|---|---|---|
+| `RECEBIDA` | 5 | Núcleo | Gravada no banco. Se o RabbitMQ estiver fora, fica aqui até o reenvio |
+| `NA_FILA` | 15 | Núcleo | Publicada em `treinamentos.solicitados` |
+| `AGUARDANDO_ML` | 25 | Worker | ML fora do ar. A solicitação continua guardada e será tentada de novo |
+| `EM_TREINAMENTO` | 60 | Worker | O serviço de ML está treinando |
+| `CONCLUIDO` | 100 | Worker | Nova versão publicada, com versão, semente, acurácia e F1 |
+| `FALHOU` | 100 | Worker | Pedido recusado pelo ML ou limite de 60 tentativas (cerca de 10 min) atingido |
+
+O histórico guarda cada evento com data, hora e detalhe. Depois de `CONCLUIDO` ou `FALHOU`, eventos
+repetidos ou atrasados são ignorados, porque a entrega do RabbitMQ é "pelo menos uma vez".
+
+Quando o treino termina, o serviço de ML grava o modelo novo no volume `ml_models` de forma atômica
+(arquivo temporário e troca). Os workers do uvicorn percebem a mudança e a classificação do RF02
+passa a responder com a nova versão, sem reiniciar nada.
+
+### RNF02: aceitar treinamentos com o ML indisponível
+
+O pedido nunca depende do serviço de ML para ser aceito. Há três proteções:
+
+1. **ML fora do ar.** O worker confere o `/health` antes de treinar. Se o ML não responde, ou cai
+   no meio do treino, o worker publica `AGUARDANDO_ML` e coloca o pedido em `treinamentos.espera`. Depois
+   de 10 s o pedido volta para a fila principal, até o ML voltar ou até 60 tentativas.
+2. **RabbitMQ fora do ar.** A solicitação já está gravada no PostgreSQL antes da publicação. Se a
+   publicação falha (timeout de 2 s), a API responde 202 do mesmo jeito, com status `RECEBIDA`. O
+   `ReenvioAgendado` procura a cada 10 s as solicitações que não foram enviadas e publica de novo.
+3. **Worker parado.** O worker só confirma a mensagem (`ack`) depois de processar. Se ele cair no
+   meio, o RabbitMQ entrega o pedido de novo quando o worker voltar.
+
+Para não haver disputa entre o envio e o primeiro evento do worker, a marcação de "enviada" é um
+`update` condicional que só muda o status se ele ainda for `RECEBIDA`, e a entidade usa
+`@DynamicUpdate`, então o evento do worker não sobrescreve a data de envio.
+
+### Testes da parte do Enzo
+
+| Camada | Classe | Testes | O que cobre |
+|---|---|---|---|
+| Domínio | `SolicitacaoDeTreinamentoTest` | 7 | Estados, histórico, eventos atrasados, conclusão sem modelo, linha do tempo |
+| Serviço | `TreinamentoServiceTest` | 7 | Envio, RabbitMQ fora do ar, reenvio parando na primeira falha, eventos descartados |
+| Mensageria | `MensageriaTest` | 4 | Filas duráveis, conversão do JSON do worker, publicação e ouvinte |
+| API | `TreinamentoRestControllerTest` | 3 | `@SpringBootTest` + MockMvc: fluxo até `CONCLUIDO`, fila fora e reenvio, validação |
+| Worker (Python) | `treinador/tests/test_processamento.py` | 9 | ML fora, queda no treino, limite de tentativas, recusa, cliente HTTP real |
+| ML (Python) | `ml/tests/test_app.py` | 3 novos (10 no total) | Novo treino com semente e amostras, nova versão servindo o `/predict`, validação |
+
+Resultado do `mvn clean install`: **141 testes** (120 até a parte do Yuri + 21 novos), **0 falhas** e
+**JaCoCo com 100%** de instruções, desvios, linhas e métodos. Nos testes os ouvintes do RabbitMQ ficam
+desligados pelo Surefire (`spring.rabbitmq.listener.simple.auto-startup=false`) e a porta
+`FilaDeTreinamentos` é simulada. Os testes Python rodam no estágio `teste` das imagens:
+
+```bash
+docker build --target teste treinador
+docker build --target teste ml
+```
+
+Saídas: `9 passed` e `10 passed`.
+
+### Verificação na stack do Docker
+
+Com tudo no ar pelo `docker compose up --build`, os três cenários foram executados:
+
+| Cenário | O que aconteceu | Resultado |
+|---|---|---|
+| Tudo disponível | 202 com `NA_FILA`, depois `EM_TREINAMENTO` e `CONCLUIDO` em cerca de 0,5 s (20.000 amostras, acurácia 0,9287) | O `/predict` passou a responder com a nova versão do modelo |
+| ML parado (`docker stop gamificacao-ml`) | 202 na hora. A solicitação ficou em `AGUARDANDO_ML` com 3 tentativas. Cadastro respondeu 200 | Ao religar o ML, concluiu sozinha na 4ª tentativa, sem ação do usuário |
+| RabbitMQ parado (`docker stop gamificacao-rabbitmq`) | 202 em 2 s com `RECEBIDA`, porque a publicação falhou | Ao religar o broker, o reenvio agendado publicou e o treino concluiu |
+
+Cada tentativa com o ML fora leva cerca de 14 s: até 4 s para descobrir que o ML não responde e 10 s
+na fila de espera.
+
+### Como testar
+
+Depois do `docker compose up --build`:
+
+| Serviço | Endereço |
+|---|---|
+| Front-end (aba Treinamentos (RabbitMQ)) | http://localhost:8080 |
+| Swagger (grupo "Treinamentos (RabbitMQ)") | http://localhost:8080/swagger-ui.html |
+| Painel do RabbitMQ (`gamificacao` / `gamificacao`) | http://localhost:15672 |
+
+```bash
+curl -X POST localhost:8080/api/treinamentos -H "Content-Type: application/json" -d "{\"solicitante\":\"Enzo\",\"motivo\":\"retreino mensal\",\"amostras\":20000}"
+curl localhost:8080/api/treinamentos/1
+```
+
+Para ver o RNF02, pare o ML, peça um treino e suba o ML de novo:
+
+```bash
+docker stop gamificacao-ml
+curl -X POST localhost:8080/api/treinamentos -H "Content-Type: application/json" -d "{\"solicitante\":\"Enzo\"}"
+curl localhost:8080/api/treinamentos/2
+docker start gamificacao-ml
+curl localhost:8080/api/treinamentos/2
+```
+
+### Evidências
+
+Tela de treinamentos: a solicitação 4 foi feita com o ML parado, ficou 12 tentativas em
+`AGUARDANDO_ML` e concluiu sozinha quando o ML voltou (RF05 e RNF02):
+
+![Treinamentos pelo RabbitMQ](docs/evidencias/11-af-treinamentos.jpg)
+
+Painel do RabbitMQ com as três filas. Com o ML parado, o pedido está em `treinamentos.espera`
+(TTL e dead-letter de volta para `treinamentos.solicitados`):
+
+![Filas no RabbitMQ](docs/evidencias/12-af-rabbitmq.jpg)
+
+---
+
+# AF: arquitetura completa no padrão C4
+
+Esta seção junta as partes do Pedro, do Yuri e do Enzo e responde aos itens a) a e) do Estudo de
+Caso 1. Os fontes dos diagramas estão em [`docs/arquitetura/c4`](docs/arquitetura/c4).
+
+## a) Organização arquitetural no código
+
+**Escolha: Alternativa A, monólito modular híbrido.** O negócio fica num único deploy Spring Boot,
+dividido em módulos verticais. As capacidades de IA ficam em serviços Python separados, e o
+processamento longo passa por um worker ligado ao RabbitMQ. A decisão está registrada no
+[ADR-004](#adr-004-monólito-modular-híbrido-alternativa-a) e no [ADR-005](#adr-005-treinamento-assíncrono-pelo-rabbitmq).
+
+```text
+Núcleo Spring Boot (um deploy)            Serviços especializados (deploys separados)
+├── colaborador     RF01                  ├── ml/            FastAPI + scikit-learn   RF02, RF05
+├── curso           RF01                  ├── conhecimento/  FastAPI + TF-IDF         RF03
+├── competencia     RF02 ── porta ──────► │
+├── recomendacao    RF03 ── porta ──────► │
+├── orientacao      RF04 ── Spring AI ──► OpenAI (opcional)
+├── treinamento     RF05 ── porta ──────► RabbitMQ ──► treinador/ (worker Python) ──► ml/
+├── ofensiva, ranking     (AC1 e AC2)
+└── shared          exceções, IA opcional, NivelDeCompetencia
+```
+
+Cada módulo segue o mesmo formato: `api` (controller e DTOs), `application` (serviços e portas),
+`domain` (regras) e `internal` (adaptadores e repositórios). Um módulo só usa outro pela camada
+`application`, por exemplo `recomendacao` lê o nível pelo `CompetenciaService`. Nenhum módulo acessa
+o repositório de outro.
+
+| Critério | Como a Alternativa A atende | Por que não a Alternativa B (microsserviços) |
+|---|---|---|
+| **Modularidade** | Módulos verticais por requisito, com camadas iguais e portas para tudo que é externo (`ClassificadorDeCompetencia`, `BuscaDeDocumentos`, `RedatorDeRecomendacao`, `PlanejadorComIa`, `FilaDeTreinamentos`) | A mesma separação existiria, mas cada módulo viraria um deploy, um banco e um pipeline |
+| **Acoplamento** | A regra de negócio conhece só interfaces. Trocar o FastAPI por outro serviço, o OpenAI por outro modelo ou o RabbitMQ por outro broker muda só o adaptador em `internal` | Chamadas REST entre serviços de negócio somariam latência e pontos de falha em fluxos que hoje são chamadas de método |
+| **Escalabilidade** | O que cresce de forma diferente já é separado: o ML escala por workers do uvicorn ou réplicas, o treino por mais workers na fila, o núcleo por réplicas atrás de um balanceador | Escalaria cada módulo sozinho, mas cadastro e consulta não têm carga que justifique |
+| **Manutenção** | O modelo é retreinado e publicado sem novo deploy do Spring Boot. Documentos do RAG mudam só no serviço de conhecimento. Cobertura de 100% protege as regras | Contratos entre muitos serviços precisariam de versionamento e testes de contrato |
+| **Complexidade operacional** | 4 aplicações próprias (núcleo, ML, conhecimento, worker), um banco e um broker, tudo num `docker compose up --build` | Exigiria gateway, descoberta de serviços, um banco por serviço e rastreamento distribuído, caro para uma equipe reduzida (RNF05) |
+
+**Trade-off aceito.** O núcleo continua escalando como um bloco e um erro grave nele derruba todos os
+módulos de negócio. Em troca, a equipe opera um único deploy de negócio. Se algum módulo passar a ter
+carga ou ritmo de mudança próprios, ele já tem fronteira e portas para ser extraído.
+
+## C4 nível 1: Contexto
+
+```mermaid
+C4Context
+    title C4 nível 1: Plataforma de Formação com IA
+
+    Person(colaborador, "Colaborador", "Cadastra-se, faz avaliações, recebe recomendações e segue planos de estudo")
+    Person(gestor, "Gestor de formação", "Cadastra cursos, pede treinamentos do modelo e acompanha a operação")
+
+    System(plataforma, "Plataforma de Formação", "Cadastro, classificação por ML, recomendações por RAG, agentes de IA e treinamento do modelo")
+
+    System_Ext(openai, "OpenAI API", "LLM opcional usado pelo Spring AI")
+
+    Rel(colaborador, plataforma, "Usa", "HTTPS")
+    Rel(gestor, plataforma, "Usa e monitora", "HTTPS")
+    Rel(plataforma, openai, "Redação e tool calling, só com OPENAI_API_KEY", "HTTPS")
+```
+
+## b) C4 nível 2: Contêineres
+
+O retângulo externo é o limite de implantação: tudo roda num único host com Docker Compose, numa rede
+`app_net`. Dentro dele há três grupos: o núcleo de negócio, os serviços de IA e a infraestrutura. Só o
+OpenAI fica fora, e ele é opcional.
+
+```mermaid
+C4Container
+    title C4 nível 2: Contêineres da Plataforma de Formação
+
+    Person(colaborador, "Colaborador", "Avaliações, recomendações e planos")
+    Person(gestor, "Gestor de formação", "Cursos, treinamentos e operação")
+    System_Ext(openai, "OpenAI API", "LLM opcional")
+
+    Boundary(host, "Limite de implantação: docker compose up --build, um host, rede app_net") {
+        Boundary(negocio, "Núcleo de negócio") {
+            Container(web, "Interface Web", "Vue 3", "Abas de cadastro, competência, RAG, agentes e treinamentos")
+            Container(core, "Núcleo Spring Boot", "Java 17, Spring Boot 3.5, Spring AI 1.1", "Monólito modular: colaborador, curso, competencia, recomendacao, orientacao, treinamento, ofensiva, ranking")
+            ContainerDb(db, "PostgreSQL 16", "Banco relacional", "Colaboradores, cursos, avaliações, planos, solicitações de treinamento")
+        }
+        Boundary(ia, "Serviços de IA (deploy independente)") {
+            Container(ml, "Serviço de ML", "Python, FastAPI, scikit-learn", "POST /predict e POST /treinamentos, modelo no volume ml_models")
+            Container(rag, "Serviço de conhecimento", "Python, FastAPI, TF-IDF", "GET /buscar em documentos institucionais")
+            Container(worker, "Worker treinador", "Python, pika", "Consome pedidos, tenta de novo e informa o andamento")
+        }
+        Boundary(infra, "Infraestrutura") {
+            ContainerQueue(mq, "RabbitMQ 3.13", "AMQP", "treinamentos.solicitados, treinamentos.espera, treinamentos.andamento")
+            Container(obs, "Prometheus e Grafana", "Observabilidade", "Latência da classificação e do ranking")
+        }
+    }
+
+    Rel(colaborador, web, "Usa", "HTTPS")
+    Rel(gestor, web, "Usa", "HTTPS")
+    Rel(web, core, "Chamadas da tela", "REST/JSON")
+    Rel(core, db, "Lê e grava", "JDBC")
+    Rel(core, ml, "Classifica o nível (RF02)", "REST síncrono, timeout 2 s")
+    Rel(core, rag, "Busca trechos (RF03, RF04)", "REST síncrono, timeout 2 s")
+    Rel(core, openai, "Redige e planeja", "HTTPS via Spring AI")
+    Rel(core, mq, "Publica pedidos e consome andamento (RF05)", "AMQP")
+    Rel(mq, worker, "Entrega pedidos", "AMQP")
+    Rel(worker, ml, "Treina o modelo", "REST, timeout 120 s")
+    Rel(obs, core, "Coleta métricas", "HTTP /actuator/prometheus")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="2")
+```
+
+| Contêiner | Imagem | Porta | Responsável |
+|---|---|---|---|
+| Núcleo Spring Boot e Interface Web | build `.` | 8080 | Todos |
+| PostgreSQL e pgAdmin | `postgres:16`, `dpage/pgadmin4:9` | 5432, 5050 | Todos |
+| Serviço de ML | build `ml` | 8001 | Pedro (RF02), Enzo (treino do RF05) |
+| Serviço de conhecimento | build `conhecimento` | 8002 | Yuri |
+| RabbitMQ | `rabbitmq:3.13-management` | 5672, 15672 | Enzo |
+| Worker treinador | build `treinador` | sem porta | Enzo |
+| Prometheus e Grafana | `prom/prometheus`, `grafana/grafana` | 9090, 3000 | AC2 |
+
+## C4 nível 3: Componentes do núcleo
+
+```mermaid
+C4Component
+    title C4 nível 3: Componentes do Núcleo Spring Boot
+
+    Container(web, "Interface Web", "Vue 3")
+    ContainerDb(db, "PostgreSQL 16", "JDBC")
+    Container(ml, "Serviço de ML", "FastAPI")
+    Container(rag, "Serviço de conhecimento", "FastAPI")
+    ContainerQueue(mq, "RabbitMQ", "AMQP")
+    System_Ext(openai, "OpenAI API", "opcional")
+
+    Container_Boundary(core, "Núcleo Spring Boot") {
+        Component(cad, "colaborador e curso", "api, application, domain, persistence", "RF01: cadastro e consulta")
+        Component(comp, "competencia", "CompetenciaService + FastApiClassificadorAdapter", "RF02: classificação por ML")
+        Component(rec, "recomendacao", "RecomendacaoService + ConhecimentoHttpAdapter + Redator", "RF03: RAG com fontes")
+        Component(ori, "orientacao", "OrientacaoService, agentes, PoliticaDeAcessoDosAgentes", "RF04: agentes com autorização")
+        Component(tre, "treinamento", "TreinamentoService, RabbitFilaDeTreinamentos, OuvinteDoAndamento", "RF05 e RNF02")
+        Component(sh, "shared", "ApiExceptionHandler, AssistenteDeIa", "Erros 400, 403, 409 e 503; IA opcional")
+    }
+
+    Rel(web, cad, "REST")
+    Rel(web, comp, "REST")
+    Rel(web, rec, "REST")
+    Rel(web, ori, "REST")
+    Rel(web, tre, "REST")
+    Rel(rec, comp, "Nível atual", "chamada de método")
+    Rel(ori, rec, "Ferramenta buscarDocumentos", "chamada de método")
+    Rel(comp, ml, "POST /predict", "REST")
+    Rel(rec, rag, "GET /buscar", "REST")
+    Rel(rec, openai, "ChatClient", "HTTPS")
+    Rel(ori, openai, "ChatClient + tools", "HTTPS")
+    Rel(tre, mq, "Publica e consome", "AMQP")
+    Rel(cad, db, "JPA")
+    Rel(tre, db, "JPA")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+```
+
+## c) Comunicação arquitetural: REST e RabbitMQ
+
+| Interação | Mecanismo | Tempo de processamento | Resposta imediata? | Desacoplamento | Tratamento de falhas |
+|---|---|---|---|---|---|
+| Front-end → núcleo (todas as telas) | REST | Curto | Sim, o usuário espera | Contrato JSON documentado no Swagger | 400, 403, 409 e 503 com mensagem |
+| Núcleo → ML, classificação (RF02) | **REST síncrono** | Dezenas de ms | Sim, o nível aparece na mesma tela e o RNF01 pede 2 s | Porta `ClassificadorDeCompetencia` | Timeout de 2 s e HTTP 503, sem gravar nada |
+| Núcleo → conhecimento, busca (RF03, RF04) | **REST síncrono** | Dezenas de ms | Sim, a recomendação é mostrada na hora | Porta `BuscaDeDocumentos` | Timeout de 2 s e HTTP 503; cadastro segue funcionando |
+| Núcleo → OpenAI (RF03, RF04) | REST (HTTPS) via Spring AI | Segundos | Sim | Portas `RedatorDeRecomendacao` e `PlanejadorComIa` | Volta para o modo extrativo ou determinístico |
+| Núcleo → worker, pedido de treino (RF05) | **RabbitMQ** | Segundos a minutos | Não, basta o 202 | Núcleo e worker não se conhecem, só a fila | Fila durável, reenvio a partir do banco, `ack` só no fim |
+| Worker → ML, treino | REST dentro do fluxo assíncrono | Segundos | Não para o usuário | O worker conhece só a URL do ML | ML fora vira espera de 10 s pela fila `treinamentos.espera` (RNF02) |
+| Worker → núcleo, andamento (RF05) | **RabbitMQ** | Curto | Não | O worker não acessa o banco do núcleo | Eventos duplicados ou atrasados são ignorados |
+| Prometheus → núcleo | HTTP (pull) | Curto | Não | Sem dependência no código | Lacuna nas métricas, sem efeito no negócio |
+
+**Regra usada.** É REST quando o usuário precisa do resultado para continuar e a resposta é rápida.
+É RabbitMQ quando o trabalho é longo, pode esperar ou depende de um serviço que pode estar fora. Por
+isso a classificação usa REST e o treino usa fila, mesmo os dois falando com o mesmo serviço de ML.
+
+**Outras interações que poderiam usar RabbitMQ no futuro:** avisar o colaborador quando uma etapa do
+plano atrasar, recalcular recomendações quando uma nova avaliação for gravada e reindexar os
+documentos do RAG quando um documento mudar. Nenhuma precisa de resposta imediata.
+
+## d) Requisitos arquiteturalmente significativos (ASRs)
+
+| ASR | Requisito | Qualidade | Decisão que ele provocou |
+|---|---|---|---|
+| ASR-06 | **RNF01**: 95% das classificações em até 2 s com 300 usuários | Desempenho | **Integração e infraestrutura.** A classificação é REST síncrono com timeout de 2 s, o ML roda em 4 workers do uvicorn com o modelo em memória e a métrica `gamificacao.competencia.classificacao` tem SLO de 2 s no Prometheus. O teste de carga está na parte do Pedro |
+| ASR-07 | **RNF02**: aceitar treinamentos com o ML indisponível | Disponibilidade | **Integração.** O treino saiu do caminho síncrono: banco, RabbitMQ com filas duráveis, fila de espera com TTL e dead-letter, worker com `ack` manual e reenvio agendado |
+| ASR-08 | **RNF04**: evolução independente da IA sem afetar cadastro e consulta | Manutenibilidade e isolamento de falhas | **Organização.** ML, conhecimento e worker são deploys separados, acessados por portas. Com qualquer um deles parado, cadastro e consulta seguem respondendo 200 |
+
+Os outros dois também pesaram: o **RNF03** levou à política de acesso dos agentes (negação por
+padrão, 403 e auditoria) e o **RNF05** levou à Alternativa A em vez de microsserviços.
+
+## e) Registro da decisão arquitetural (ADR)
+
+A decisão principal é o [ADR-004](#adr-004-monólito-modular-híbrido-alternativa-a), registrado no
+início da AF: **monólito modular híbrido**. Abaixo está o ADR da decisão de comunicação, que
+completa o ADR-004.
+
+### ADR-005: Treinamento assíncrono pelo RabbitMQ
+
+**Status:** Aceito · **Entrega:** AF
+
+**Contexto.** O treino do modelo leva de segundos a minutos e o RNF02 exige aceitar pedidos mesmo
+com o serviço de ML fora do ar. Uma chamada REST direta deixaria o usuário esperando e perderia o
+pedido se o ML estivesse parado.
+
+**Decisão.** O núcleo grava a solicitação no PostgreSQL e publica um pedido na fila durável
+`treinamentos.solicitados` do RabbitMQ. Um worker Python consome a fila, chama o ML por REST e
+devolve o andamento pela fila `treinamentos.andamento`. Se o ML estiver fora, o pedido espera 10 s em
+`treinamentos.espera` e volta por dead-letter. A API responde 202 com o endereço para acompanhar.
+
+**Justificativa.** O pedido fica protegido em três lugares (banco, fila durável e mensagem sem `ack`),
+o núcleo não conhece o worker e o worker não conhece o banco do núcleo. O RabbitMQ já estava no stack
+proposto pela empresa e cabe num container.
+
+**Consequência (trade-off).** Mais dois containers para operar (RabbitMQ e worker) e consistência
+eventual: o status na tela fica alguns segundos atrás do que acontece no worker. A entrega é "pelo
+menos uma vez", então o núcleo precisa ignorar eventos repetidos, e um pedido entregue duas vezes
+pode gerar um treino a mais.
+
+## Rastreabilidade da AF
+
+| Requisito | Responsável | Módulo ou serviço | Comunicação | Evidência |
+|---|---|---|---|---|
+| RF01 | Pedro | `colaborador`, `curso` | REST | `07-af-cursos.jpg` |
+| RF02 | Pedro | `competencia` + `ml` | REST síncrono | `08-af-competencia-ml.jpg` |
+| RF03 | Yuri | `recomendacao` + `conhecimento` | REST síncrono, Spring AI opcional | `09-af-recomendacao-rag.jpg` |
+| RF04 | Yuri | `orientacao` | Chamada de método, Spring AI com tools opcional | `10-af-agentes-ia.jpg` |
+| RF05 | Enzo | `treinamento` + `treinador` + `ml` | RabbitMQ | `11-af-treinamentos.jpg` |
+| RNF01 | Pedro | `competencia`, `ml` | REST com timeout | Teste de carga na parte do Pedro |
+| RNF02 | Enzo | `treinamento`, `treinador` | RabbitMQ com fila de espera | `12-af-rabbitmq.jpg` e verificação acima |
+| RNF03 | Yuri | `orientacao` | Política de acesso dos agentes | `PoliticaDeAcessoDosAgentesTest` |
+| RNF04 | Todos | Serviços Python separados | Portas e adaptadores | Testes com serviços parados |
+| RNF05 | Todos | Alternativa A | Um `docker compose up --build` | ADR-004 |

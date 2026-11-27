@@ -1,0 +1,37 @@
+C4Container
+    title C4 nível 2: Contêineres da Plataforma de Formação
+
+    Person(colaborador, "Colaborador", "Avaliações, recomendações e planos")
+    Person(gestor, "Gestor de formação", "Cursos, treinamentos e operação")
+    System_Ext(openai, "OpenAI API", "LLM opcional")
+
+    Boundary(host, "Limite de implantação: docker compose up --build, um host, rede app_net") {
+        Boundary(negocio, "Núcleo de negócio") {
+            Container(web, "Interface Web", "Vue 3", "Abas de cadastro, competência, RAG, agentes e treinamentos")
+            Container(core, "Núcleo Spring Boot", "Java 17, Spring Boot 3.5, Spring AI 1.1", "Monólito modular: colaborador, curso, competencia, recomendacao, orientacao, treinamento, ofensiva, ranking")
+            ContainerDb(db, "PostgreSQL 16", "Banco relacional", "Colaboradores, cursos, avaliações, planos, solicitações de treinamento")
+        }
+        Boundary(ia, "Serviços de IA (deploy independente)") {
+            Container(ml, "Serviço de ML", "Python, FastAPI, scikit-learn", "POST /predict e POST /treinamentos, modelo no volume ml_models")
+            Container(rag, "Serviço de conhecimento", "Python, FastAPI, TF-IDF", "GET /buscar em documentos institucionais")
+            Container(worker, "Worker treinador", "Python, pika", "Consome pedidos, tenta de novo e informa o andamento")
+        }
+        Boundary(infra, "Infraestrutura") {
+            ContainerQueue(mq, "RabbitMQ 3.13", "AMQP", "treinamentos.solicitados, treinamentos.espera, treinamentos.andamento")
+            Container(obs, "Prometheus e Grafana", "Observabilidade", "Latência da classificação e do ranking")
+        }
+    }
+
+    Rel(colaborador, web, "Usa", "HTTPS")
+    Rel(gestor, web, "Usa", "HTTPS")
+    Rel(web, core, "Chamadas da tela", "REST/JSON")
+    Rel(core, db, "Lê e grava", "JDBC")
+    Rel(core, ml, "Classifica o nível (RF02)", "REST síncrono, timeout 2 s")
+    Rel(core, rag, "Busca trechos (RF03, RF04)", "REST síncrono, timeout 2 s")
+    Rel(core, openai, "Redige e planeja", "HTTPS via Spring AI")
+    Rel(core, mq, "Publica pedidos e consome andamento (RF05)", "AMQP")
+    Rel(mq, worker, "Entrega pedidos", "AMQP")
+    Rel(worker, ml, "Treina o modelo", "REST, timeout 120 s")
+    Rel(obs, core, "Coleta métricas", "HTTP /actuator/prometheus")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="2")

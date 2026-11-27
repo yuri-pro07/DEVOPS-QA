@@ -1,0 +1,13 @@
+C4Context
+    title C4 nível 1: Plataforma de Formação com IA
+
+    Person(colaborador, "Colaborador", "Cadastra-se, faz avaliações, recebe recomendações e segue planos de estudo")
+    Person(gestor, "Gestor de formação", "Cadastra cursos, pede treinamentos do modelo e acompanha a operação")
+
+    System(plataforma, "Plataforma de Formação", "Cadastro, classificação por ML, recomendações por RAG, agentes de IA e treinamento do modelo")
+
+    System_Ext(openai, "OpenAI API", "LLM opcional usado pelo Spring AI")
+
+    Rel(colaborador, plataforma, "Usa", "HTTPS")
+    Rel(gestor, plataforma, "Usa e monitora", "HTTPS")
+    Rel(plataforma, openai, "Redação e tool calling, só com OPENAI_API_KEY", "HTTPS")
